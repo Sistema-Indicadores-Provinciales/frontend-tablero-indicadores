@@ -185,27 +185,20 @@ export const useCrossFilters = (
                 } else {
                     const currentArr = current as (string | number)[];
 
+                    // Solo agregamos opciones nuevas que aparecieron (expandir).
+                    // Nunca sacamos valores ya seleccionados por más que momentáneamente
+                    // no figuren en las opciones disponibles: eso era lo que hacía que,
+                    // al tocar un filtro, otros filtros correlacionados perdieran
+                    // selecciones en cascada.
                     const prevValues = new Set(prevOptions.map(o => String(o.value)));
                     const newOptions = options.filter(o => !prevValues.has(String(o.value)));
 
-                    const stillValid = currentArr.filter(v =>
-                        options.some(o => String(o.value) === String(v))
-                    );
-
                     const newValues = newOptions
                         .map(o => o.value)
-                        .filter(v => !stillValid.map(String).includes(String(v)));
+                        .filter(v => !currentArr.map(String).includes(String(v)));
 
-                    const merged = [...stillValid, ...newValues];
-
-                    if (merged.length === 0) {
-                        next[key] = options.map(o => o.value);
-                        changed = true;
-                    } else if (
-                        merged.length !== currentArr.length ||
-                        !merged.every(v => currentArr.map(String).includes(String(v)))
-                    ) {
-                        next[key] = merged;
+                    if (newValues.length > 0) {
+                        next[key] = [...currentArr, ...newValues];
                         changed = true;
                     }
                 }

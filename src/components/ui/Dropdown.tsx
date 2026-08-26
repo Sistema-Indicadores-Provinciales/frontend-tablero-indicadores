@@ -145,6 +145,14 @@ const Dropdown: React.FC<Props> = ({
         }
     };
 
+    // Selecciona únicamente esta opción, descartando el resto
+    const handleOnly = (optValue: string | number) => {
+        if (!multiple) return;
+        setInternalValue([optValue]);
+        setPending(false);
+        (onChange as MultipleProps["onChange"])([optValue]);
+    };
+    
     // Texto del botón — usa el valor externo (el confirmado), no el interno
     const getButtonText = (): string => {
         if (!multiple) {
@@ -297,28 +305,56 @@ const Dropdown: React.FC<Props> = ({
                                 sx={{
                                     display: "flex",
                                     alignItems: "center",
+                                    justifyContent: multiple ? "space-between" : "flex-start",
                                     padding: multiple ? "4px 12px" : "8px 12px",
                                     cursor: "pointer",
                                     background: !multiple && opt.value === value ? "#eff6ff" : "transparent",
                                     "&:hover": { background: "#f1f5f9" },
+                                    "&:hover .dropdown-only-btn": { opacity: 1 },
                                 }}
                             >
+                                <Box sx={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+                                    {multiple && (
+                                        <Checkbox
+                                            size="small"
+                                            checked={selectedValues.includes(opt.value)}
+                                            sx={{ padding: "2px", marginRight: "8px" }}
+                                        />
+                                    )}
+                                    <Typography
+                                        sx={{
+                                            fontSize: "13px",
+                                            color: !multiple && opt.value === value ? "primary.main" : "#1e293b",
+                                            fontWeight: !multiple && opt.value === value ? 600 : 400,
+                                            whiteSpace: "nowrap",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </Typography>
+                                </Box>
+
                                 {multiple && (
-                                    <Checkbox
-                                        size="small"
-                                        checked={selectedValues.includes(opt.value)}
-                                        sx={{ padding: "2px", marginRight: "8px" }}
-                                    />
+                                    <Typography
+                                        className="dropdown-only-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOnly(opt.value);
+                                        }}
+                                        sx={{
+                                            fontSize: "11px",
+                                            fontWeight: 600,
+                                            color: "primary.main",
+                                            opacity: 0,
+                                            flexShrink: 0,
+                                            marginLeft: "8px",
+                                            "&:hover": { textDecoration: "underline" },
+                                        }}
+                                    >
+                                        Solamente
+                                    </Typography>
                                 )}
-                                <Typography
-                                    sx={{
-                                        fontSize: "13px",
-                                        color: !multiple && opt.value === value ? "primary.main" : "#1e293b",
-                                        fontWeight: !multiple && opt.value === value ? 600 : 400,
-                                    }}
-                                >
-                                    {opt.label}
-                                </Typography>
                             </Box>
                         ))}
                     </Box>
