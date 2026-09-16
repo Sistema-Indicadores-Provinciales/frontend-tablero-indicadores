@@ -1,9 +1,11 @@
 import axios, { AxiosError, AxiosRequestConfig } from "axios";
 
 // Usa automáticamente localhost o la IP actual del frontend
-const API_URL = `${window.location.protocol}//${window.location.hostname}:${
-  import.meta.env.VITE_APP_SERVER_PORT || 3000
-}`;
+const API_URL =
+  import.meta.env.VITE_APP_SERVER_URL ||
+  `${window.location.protocol}//${window.location.hostname}:${
+    import.meta.env.VITE_APP_SERVER_PORT || 3000
+  }`;
 
 console.log(API_URL)
 
