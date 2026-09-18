@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -52,6 +53,8 @@ const DashboardSectionsModal: React.FC<SectionsModalProps> = ({ dashboard, open,
   const [newSectionShow, setNewSectionShow] = useState(true);
   // Estado para el id de la sección que se está a punto de eliminar (para mostrar confirmación).
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (dashboard?.sections) {
@@ -119,13 +122,16 @@ const DashboardSectionsModal: React.FC<SectionsModalProps> = ({ dashboard, open,
 
   // Maneja la eliminación de una sección: muestra confirmación y luego llama a la API.
   const handleDeleteSection = async (sectionId: string) => {
+    if (deleting) return;
+    setDeleting(true); setError('');
     try {
-      await sendDeleteSection(sectionId);
+      const result = await sendDeleteSection(sectionId);
+      if (result.removedDashboards?.includes(dashboard?._id)) { onClose(); return; }
       setSections(prev => prev.filter(section => section._id !== sectionId));
       setConfirmDeleteId(null);
     } catch (error) {
-      console.error("Error eliminando la sección", error);
-    }
+      setError('No se pudo eliminar la sección. Reintentá.');
+    } finally { setDeleting(false); }
   };
 
   // Agrega una nueva sección y actualiza la lista en el dashboard.
@@ -154,7 +160,7 @@ const DashboardSectionsModal: React.FC<SectionsModalProps> = ({ dashboard, open,
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={deleting ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         Secciones de:{" "}
         {dashboard?.icon && (
@@ -166,6 +172,7 @@ const DashboardSectionsModal: React.FC<SectionsModalProps> = ({ dashboard, open,
         {dashboard?.name || ''}
       </DialogTitle>
       <DialogContent>
+        {error && <Alert severity="error">{error}</Alert>}
         <Container>
           {/* Encabezados para las columnas */}
           <Box display="flex" alignItems="center" mb={1} fontWeight="bold">
@@ -218,7 +225,7 @@ const DashboardSectionsModal: React.FC<SectionsModalProps> = ({ dashboard, open,
                         <IconButton color='primary' onClick={() => handleStartEditing(sectionId, section.name || '')}>
                           <EditIcon />
                         </IconButton>
-                        <IconButton color='secondary' onClick={() => setConfirmDeleteId(sectionId)}>
+                        <IconButton aria-label={`Eliminar sección ${section.name || section.keyname}`} disabled={deleting} color='secondary' onClick={() => { setError(''); setConfirmDeleteId(sectionId); }}>
                           <DeleteIcon />
                         </IconButton>
                       </>
@@ -236,9 +243,9 @@ const DashboardSectionsModal: React.FC<SectionsModalProps> = ({ dashboard, open,
                     mt={-1} // Opcional, para ajustar el espacio vertical
                   >
                     <Typography variant="body2" color="error" style={{ marginRight: 8 }}>
-                      ¿Estás seguro de eliminar esta sección?
+                      {dashboard?.generatedWorkspaceId && sections.length === 1 ? 'Esta es la última sección: también se quitará el tablero generado de la lista y el menú.' : '¿Estás seguro de eliminar esta sección?'}
                     </Typography>
-                    <IconButton color="primary" onClick={() => handleDeleteSection(sectionId)}>
+                    <IconButton aria-label="Confirmar eliminación de sección" disabled={deleting} color="primary" onClick={() => handleDeleteSection(sectionId)}>
                       <CheckIcon />
                     </IconButton>
                     <IconButton color="secondary" onClick={() => setConfirmDeleteId(null)}>

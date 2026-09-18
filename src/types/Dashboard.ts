@@ -7,6 +7,7 @@ class Dashboard {
   public show: boolean = false;
   public sections: Sections[] = [];
   public icon?: string;
+  public generatedWorkspaceId?: string;
   
   constructor(data: Partial<Dashboard>) {
     Object.assign(this, data);

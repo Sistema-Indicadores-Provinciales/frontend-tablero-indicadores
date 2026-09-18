@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
+  Alert,
   Button,
   Container,
   Dialog,
@@ -16,6 +17,7 @@ import {
 import { ExpandMore, ExpandLess } from '@mui/icons-material';
 import { Icon } from '@iconify/react';
 import User from 'types/User';
+import { AuthContext } from 'contexts/AuthContext';
 import { getAllDashboards } from 'services/DashboardServices';
 import {
   updateUserAccess,
@@ -28,6 +30,7 @@ interface SectionType {
 }
 
 interface DashboardType {
+  generatedWorkspaceId?: string;
   _id: string;
   keyname: string;
   icon: string;
@@ -59,7 +62,11 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
   const [accessState, setAccessState] = useState<AccessState>({});
   const [expanded, setExpanded] = useState<{ [dashId: string]: boolean }>({});
 
-  console.log(item)
+  const { refreshAccessKeynames } = useContext(AuthContext);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (show && item) {
@@ -68,8 +75,10 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
   }, [show, item]);
 
   const loadDashboards = async () => {
+    setLoading(true); setLoaded(false); setError('');
     try {
       const res = await getAllDashboards();
+      if (!res.success) throw new Error(res.error || 'No se pudieron cargar los tableros.');
       if (res.data) {
         const dashboardsData = res.data as DashboardType[];
         setDashboards(dashboardsData);
@@ -87,10 +96,11 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
         });
 
         setAccessState(init);
+        setLoaded(true);
       }
     } catch (e) {
-      console.error(e);
-    }
+      setError(e instanceof Error ? e.message : 'No se pudieron cargar los tableros.');
+    } finally { setLoading(false); }
   };
 
   // const getAccessChanges = () => {
@@ -124,7 +134,8 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
     setAccessState((prev) => {
       const cur = prev[dashId];
       const en = !cur.enabled;
-      const secs = en ? cur.sections : Object.fromEntries(Object.keys(cur.sections).map((s) => [s, false]));
+      const generated = dashboards.find(d => d._id === dashId)?.generatedWorkspaceId;
+      const secs = en ? (generated ? Object.fromEntries(Object.keys(cur.sections).map(s => [s, true])) : cur.sections) : Object.fromEntries(Object.keys(cur.sections).map((s) => [s, false]));
       return { ...prev, [dashId]: { enabled: en, sections: secs } };
     });
 
@@ -142,7 +153,7 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
     });
 
   const handleSave = async () => {
-    if (!item?._id) return;
+    if (!item?._id || !loaded || saving) return;
     const userId = item._id;
 
     // Construir el array completo a partir de accessState:
@@ -155,22 +166,26 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
         .map(([sectionId]) => sectionId),
     }));
 
-    console.log('Array final', fullAccess)
+    setSaving(true); setError('');
 
     try {
-      await updateUserAccess(userId, fullAccess);
+      const response = await updateUserAccess(userId, fullAccess);
+      if (!response.success) throw new Error(response.error || 'No se pudieron guardar los accesos.');
+      await refreshAccessKeynames();
       onAccept();
       onClose();
     } catch (e) {
-      console.error('Error al guardar access completo:', e);
-    }
+      setError(e instanceof Error ? e.message : 'No se pudieron actualizar los accesos. Reintentá.');
+    } finally { setSaving(false); }
   };
 
 
   return (
-    <Dialog open={show} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={show} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>Gestionar Accesos</DialogTitle>
       <DialogContent>
+        {error && <Alert severity="error">{error}</Alert>}
+        {loading && <Typography role="status">Cargando tableros…</Typography>}
         <Container>
           {dashboards.map((dash) => (
             <Box key={dash._id} mb={2} border={1} borderRadius={2} p={1} borderColor="grey.300">
@@ -183,13 +198,14 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
                   <FormControlLabel
                     control={
                       <Switch
+                        disabled={loading || saving}
                         checked={accessState[dash._id]?.enabled || false}
                         onChange={() => handleDashboardToggle(dash._id)}
                       />
                     }
                     label="Acceso"
                   />
-                  <IconButton onClick={() => setExpanded((e) => ({ ...e, [dash._id]: !e[dash._id] }))}>
+                  <IconButton aria-label={`Secciones de ${dash.name}`} onClick={() => setExpanded((e) => ({ ...e, [dash._id]: !e[dash._id] }))}>
                     {expanded[dash._id] ? <ExpandLess /> : <ExpandMore />}
                   </IconButton>
                 </Box>
@@ -201,7 +217,7 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
                       key={sec._id}
                       control={
                         <Switch
-                          disabled={!accessState[dash._id]?.enabled}
+                          disabled={loading || saving || !accessState[dash._id]?.enabled}
                           checked={accessState[dash._id]?.sections[sec._id] || false}
                           onChange={() => handleSectionToggle(dash._id, sec._id)}
                         />
@@ -216,8 +232,8 @@ const UserAccessModal: React.FC<UserAccessModalProps> = ({
         </Container>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
-        <Button onClick={handleSave}>Guardar</Button>
+        <Button disabled={saving} onClick={onClose}>Cancelar</Button>
+        <Button disabled={saving || loading || !loaded} onClick={handleSave}>{saving ? 'Guardando…' : 'Guardar'}</Button>
       </DialogActions>
     </Dialog>
   );

@@ -5,24 +5,27 @@ import { useNavigate } from 'react-router-dom';
 import { sendAuthLogin } from 'services/AuthServices';
 
 const LoginPage = () => {
-  const [username, setUsername] = useState<string>();
-  const [password, setPassword] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const { loginUser } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSendLogin = async () => {
-    if (!!username && !!password) {
-      setError(undefined)
-      const { error, data } = await sendAuthLogin(username, password)
-      if (data) {
-        loginUser(data)
-        navigate('/')
+    if (busy || !username.trim() || !password) return;
+    setBusy(true); setError('');
+    try {
+      const { error, data, success } = await sendAuthLogin(username.trim(), password);
+      if (success && data) {
+        await loginUser(data).catch(() => {});
+        navigate('/main', { replace: true });
       } else {
-        setError(error)
+        setError(error || 'No se pudo conectar con el sistema. Verificá que el backend esté iniciado y volvé a intentar.');
       }
-    }
+    } catch { setError('No se pudo iniciar sesión. Volvé a intentar.'); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -38,6 +41,8 @@ const LoginPage = () => {
     >
       <CssBaseline />
       <Box
+        component="form"
+        onSubmit={event => { event.preventDefault(); handleSendLogin(); }}
         sx={{
           width: '100%',
           maxWidth: '400px',
@@ -51,7 +56,10 @@ const LoginPage = () => {
           Ingresar al tablero
         </Typography>
         <TextField
-          label="Username"
+          label="Usuario"
+          autoComplete="username"
+          required
+          disabled={busy}
           variant="outlined"
           fullWidth
           margin="normal"
@@ -59,7 +67,10 @@ const LoginPage = () => {
           onChange={(event) => setUsername(event.target.value)}
         />
         <TextField
-          label="Password"
+          label="Contraseña"
+          autoComplete="current-password"
+          required
+          disabled={busy}
           variant="outlined"
           fullWidth
           margin="normal"
@@ -75,9 +86,10 @@ const LoginPage = () => {
           color="primary"
           fullWidth
           sx={{ marginTop: '1rem' }}
-          onClick={handleSendLogin}
+          type="submit"
+          disabled={busy || !username.trim() || !password}
         >
-          Ingresar
+          {busy ? 'Ingresando…' : 'Ingresar'}
         </Button>
       </Box>
     </Container>

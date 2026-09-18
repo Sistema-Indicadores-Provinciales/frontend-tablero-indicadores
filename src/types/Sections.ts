@@ -3,6 +3,7 @@ class Sections {
   public keyname: string = '';
   public name?: string;
   public show: boolean = false;
+  public workspaceId?: string;
 
   constructor(data: Partial<Sections>) {
     Object.assign(this, data);

@@ -14,7 +14,7 @@ const Base = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { validateUser, loginUser, accessKeynames, refreshAccessKeynames } = useContext(AuthContext);
+  const { authUser, validateUser, loginUser, accessKeynames, refreshAccessKeynames } = useContext(AuthContext);
 
   const theme = useTheme();
 
@@ -26,7 +26,7 @@ const Base = () => {
     if (!user) {
       navigate('/login');
     } else {
-      loginUser(user);
+      loginUser(user).catch(() => {});
     }
   }, []);
 
@@ -34,10 +34,16 @@ const Base = () => {
     const user = validateUser();
     if (!user) {
       navigate('/login');
-    } else {
-      refreshAccessKeynames();
+    } else if (authUser) {
+      refreshAccessKeynames().catch(() => {});
     }
   }, [location]);
+
+  useEffect(() => {
+    const refresh = () => { if (validateUser()) refreshAccessKeynames().catch(() => {}); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [refreshAccessKeynames]);
 
   useEffect(() => {
     const user = validateUser();

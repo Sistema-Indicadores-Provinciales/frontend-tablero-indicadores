@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import { analytics } from "config/Analytics";
 
 interface ColumnMeta {
     type: string;
@@ -17,13 +17,6 @@ export const useExcelSheet = (filename: string, sheetName: string) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Usa automáticamente localhost o IP LAN
-    const apiBase =
-        import.meta.env.VITE_FASTAPI_URL ||
-        `${window.location.protocol}//${window.location.hostname}:${
-            import.meta.env.VITE_FASTAPI_PORT || 8000
-        }`;
-
     useEffect(() => {
         if (!filename || !sheetName) return;
 
@@ -34,7 +27,7 @@ export const useExcelSheet = (filename: string, sheetName: string) => {
         formData.append("filename", filename);
         formData.append("sheet_name", sheetName);
 
-        axios.post(`${apiBase}/system-data/read-columns/`, formData)
+        analytics.post(`/system-data/read-columns/`, formData)
             .then(res => setData(res.data))
             .catch(err => {
                 const msg =
@@ -45,7 +38,7 @@ export const useExcelSheet = (filename: string, sheetName: string) => {
             })
             .finally(() => setLoading(false));
 
-    }, [filename, sheetName, apiBase]);
+    }, [filename, sheetName]);
 
     return { data, loading, error };
 };

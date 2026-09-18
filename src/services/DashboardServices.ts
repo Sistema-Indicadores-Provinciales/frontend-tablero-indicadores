@@ -11,6 +11,9 @@ export const getAllDashboards = async (): Promise<DataResponse<Dashboard[]>> => 
   return await responseFormatter(apiClient.get('/dashboard/get-all'));
 };
 
+export const deleteDashboard = async (id: string) => (await apiClient.delete(`/dashboard/${id}`)).data.data;
+export const reconcileGeneratedDashboards = async () => (await apiClient.post('/dashboard/reconcile-generated')).data.data;
+
 export const sendEditDashboard = async (dashboardId: string, show?: boolean, icon?: string, newName?: string, newKeyname?: string) => {
   const payload: any = {};
   if (show !== undefined) payload.show = show;

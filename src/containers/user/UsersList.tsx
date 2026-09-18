@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import User from 'types/User';
 import UserFormModal from 'components/user/UserFormModal';
 import { getAllUsers, deleteUser } from 'services/UserServices';
 import TableItems from 'components/user/TableItems';
 import UserAccessModal from 'components/user/UserAccessModal';
+import NavbarContext from 'contexts/NavbarContext';
 
 const UserList = () => {
+  const { changeNavTitle } = useContext(NavbarContext);
   const [open, setOpen] = useState<boolean>(false);
   const [openAccess, setOpenAccess] = useState<boolean>(false);
   const [selectedUser, setSelectedUser] = useState<User | undefined>();
@@ -72,6 +74,7 @@ const UserList = () => {
   };
 
   useEffect(() => {
+    changeNavTitle('Administrar usuarios');
     getUsuarios()
   }, [])
 

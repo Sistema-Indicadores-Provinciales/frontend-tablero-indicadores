@@ -100,13 +100,15 @@ const DashboardTable: React.FC<DashboardTableProps> = (props) => {
               <TableCell align="center">
                 {/* Botón Editar */}
                 {props.onClickEdit && (
-                  <IconButton color="primary" onClick={() => handleEdit(dashboard)}>
+                  <IconButton aria-label={`Editar ${dashboard.name || dashboard.keyname}`} title="Editar tablero" color="primary" onClick={() => handleEdit(dashboard)}>
                     <EditIcon />
                   </IconButton>
                 )}
                 {/* Botón Secciones */}
                 {props.onClickSections && (
                   <IconButton
+                    aria-label={`Secciones de ${dashboard.name || dashboard.keyname}`}
+                    title="Administrar secciones"
                     color="secondary"
                     onClick={() => props.onClickSections!(dashboard)}
                   >
@@ -115,7 +117,7 @@ const DashboardTable: React.FC<DashboardTableProps> = (props) => {
                 )}
                 {/* Botón Eliminar si existe */}
                 {props.onClickDelete && (
-                  <IconButton color="secondary" onClick={() => handleDelete(dashboard)}>
+                  <IconButton aria-label={`Eliminar ${dashboard.name || dashboard.keyname}`} title="Eliminar tablero completo" color="error" onClick={() => handleDelete(dashboard)}>
                     <DeleteIcon />
                   </IconButton>
                 )}

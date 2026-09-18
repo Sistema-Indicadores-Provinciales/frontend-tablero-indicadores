@@ -1,0 +1,43 @@
+.generator { max-width: 1600px; margin: 0 auto; padding: 24px; color: #172b4d; }
+.generator h1 { margin-bottom: 8px; font-size: 28px; }
+.generator h2 { font-size: 19px; margin-top: 0; }
+.generator-panel { background: white; border: 1px solid #dbe3ec; border-radius: 12px; padding: 20px; margin: 18px 0; min-width: 0; }
+.generator-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.generator label:not(.MuiFormLabel-root) { display: flex; flex-direction: column; gap: 6px; font-size: 13px; flex: 1 1 170px; max-width: 380px; }
+.generator input:not(.MuiInputBase-input), .generator select, .generator button:not(.MuiButtonBase-root) { font: inherit; padding: 9px 11px; border: 1px solid #bac8da; border-radius: 6px; min-height: 39px; background: white; color: #172b4d; max-width: 100%; }
+.generator button:not(.MuiButtonBase-root) { cursor: pointer; font-weight: 600; }
+.generator button:not(.MuiButtonBase-root):disabled { opacity: .5; cursor: wait; }
+.generator button:not(.MuiButtonBase-root):hover:not(:disabled) { background: #eaf1ff; }
+.generator .generator-primary { background: #003667; color: white; }
+.generator label.generator-drop { padding: 18px; border: 2px dashed #a0b5d2; border-radius: 8px; max-width: none; margin: 18px 0; background: #f7faff; }
+.generator-error { background: #fff0f0; border-left: 4px solid #be123c; padding: 12px; color: #8a1634; }
+.generator-notice { background: #eaf8ee; padding: 12px; color: #146432; }
+.generator-hint { font-size: 13px; color: #53657f; }
+.generator-table { overflow: auto; max-height: 340px; margin: 14px 0; }
+.generator table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.generator td, .generator th { border: 1px solid #e0e6ef; padding: 8px; text-align: left; white-space: nowrap; }
+.generator th { background: #f2f6fc; }
+.generator th select { display: block; margin-top: 8px; }
+.generator-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+.generator-widget { margin: 0; }
+.generator-indicator { padding: 50px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+.generator-indicator strong { font-size: 48px; color: #00558a; }
+@media(max-width: 900px) { .generator-widget { grid-column: span 12 !important; } .generator { padding: 12px; } }
+
+.generator .generator-primary:hover:not(:disabled) { background: #00558a; color: white; }
+.generator-hero { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 28px; border-radius: 12px; background: linear-gradient(110deg, #003667, #00558a); color: white; }
+.generator-hero h1 { margin: 8px 0; overflow-wrap: anywhere; }
+.generator-hero p { margin: 0; color: #dbeaf5; }
+.generator-eyebrow { font-size: 11px; letter-spacing: 1.7px; font-weight: 600; }
+.generator-library { border-left: 4px solid #00558a; }
+.generator-library h2 { margin-bottom: 6px; }
+.generator-library p { margin: 0; }
+.generator-link-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 14px; border-radius: 6px; background: white; color: #003667; border: 1px solid #bac8da; text-decoration: none; font-size: 14px; font-weight: 600; }
+.generator-link-button:hover { background: #eaf1ff; }
+.generator-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-radius: 8px; }
+.generator-hero button { display: inline-flex; align-items: center; gap: 6px; }
+.saved-dashboard .generator-grid { margin-top: 24px; }
+.saved-dashboard .generator-widget h2 { border-bottom: 1px solid #e6edf3; padding-bottom: 12px; overflow-wrap: anywhere; }
+.generator-loading { min-height: 250px; display: grid; place-items: center; background: #f6f8fb; border-radius: 8px; color: #53657f; }
+.generator button:focus-visible, .generator a:focus-visible { outline: 3px solid #008bc9; outline-offset: 3px; }
+@media(max-width: 600px) { .generator-hero { padding: 20px; } .generator-hero h1 { font-size: 24px; } .generator-hero > svg { display: none; } }

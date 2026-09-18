@@ -1,15 +1,5 @@
-import React, { useState } from "react";
-import FileUpload from "../components/analytics/FileUpload";
-import SheetSelector, { FileInfo } from "../components/analytics/SheetSelector";
-
-const AnalyticsExcelContainer: React.FC = () => {
-    const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
-
-    return !fileInfo ? (
-        <FileUpload onUploadSuccess={setFileInfo} />
-    ) : (
-        <SheetSelector fileInfo={fileInfo} />
-    );
-};
-
-export default AnalyticsExcelContainer;
+import { lazy, Suspense } from 'react';
+const ChartGenerator = lazy(() => import('./ChartGenerator'));
+export default function AnalyticsExcelContainer() {
+  return <Suspense fallback={<p>Cargando generador…</p>}><ChartGenerator /></Suspense>;
+}

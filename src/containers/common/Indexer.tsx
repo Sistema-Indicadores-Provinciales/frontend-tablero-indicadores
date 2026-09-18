@@ -10,6 +10,7 @@ interface IndexerProps {
   title?: string;
   routes: IndicatorRoute[];
   main?: boolean;
+  action?: React.ReactNode;
 }
 
 const headTitle = 'indice tablero de'
@@ -42,9 +43,10 @@ const Indexer: React.FC<IndexerProps> = (props) => {
   return (
     <Box sx={{ flexGrow: 1 }}>
       <Grid container spacing={5}>
+        {props.action && <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>{props.action}</Grid>}
         {
           listRoutes?.map((route, index) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
+            <Grid key={route.path} size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }}>
               <SectionCard key={`sectioncard-${route.title}-${index}`} {...route} transitionDelay={(index + 1) * cardTransitionDelay} />
             </Grid>
           ))

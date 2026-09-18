@@ -60,7 +60,7 @@ const TableItems: React.FC<TableItemsProps> = (props) => {
                     </IconButton>
                   )}
                   {props?.onClickDashboards && (
-                    <IconButton color="secondary" onClick={() => handleAccess(user)}>
+                    <IconButton aria-label={`Accesos de ${user.username}`} color="secondary" onClick={() => handleAccess(user)}>
                       <DashboardIcon />
                     </IconButton>
                   )}

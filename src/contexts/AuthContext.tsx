@@ -1,6 +1,7 @@
-import { createContext, useState } from "react";
+import { createContext, useCallback, useRef, useState } from "react";
 import User from "types/User";
 import { apiClient } from "config/Axios";
+import Dashboard from "types/Dashboard";
 
 interface AuthContextProps {
   authUser?: User;
@@ -14,6 +15,9 @@ interface AuthContextProps {
   refreshAccessKeynames: () => Promise<void>;
   accessSections: Record<string, string[]>;
   accessDashboards: { keyname: string; name?: string; icon?: string }[];
+  dashboards: Dashboard[];
+  catalogReady: boolean;
+  catalogError: boolean;
 }
 
 const AuthContext = createContext<AuthContextProps>({
@@ -27,7 +31,7 @@ const AuthContext = createContext<AuthContextProps>({
   setSessionExpired: () => {},
   refreshAccessKeynames: async () => {},
   accessSections: {},
-  accessDashboards: []
+  accessDashboards: [], dashboards: [], catalogReady: false, catalogError: false,
 });
 
 export const AuthContextProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -36,10 +40,18 @@ export const AuthContextProvider: React.FC<React.PropsWithChildren> = ({ childre
   const [accessSections, setAccessSections] = useState<Record<string, string[]>>({});
   const [sessionExpired, setSessionExpired] = useState(false);
   const [accessDashboards, setAccessDashboards] = useState<{ keyname: string; name?: string; icon?: string }[]>([]);
+  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [catalogError, setCatalogError] = useState(false);
+  const catalogRequest = useRef(0);
 
-  const refreshAccessKeynames = async () => {
+  const refreshAccessKeynames = useCallback(async () => {
+    const request = ++catalogRequest.current;
     try {
-      const res = await apiClient.get('/user/my-dashboards');
+      const [res, catalog] = await Promise.all([apiClient.get('/user/my-dashboards'), apiClient.get('/dashboard/get-all')]);
+      if (request !== catalogRequest.current) return;
+      setDashboards(catalog.data?.data ?? []);
+      setCatalogError(false);
       const data = res.data?.data ?? [];
       setAccessKeynames(data.map((d: any) => d.keyname));
       setAccessDashboards(data.map((d: any) => ({ keyname: d.keyname, name: d.name, icon: d.icon })));
@@ -49,12 +61,17 @@ export const AuthContextProvider: React.FC<React.PropsWithChildren> = ({ childre
       });
       setAccessSections(sections);
     } catch (error) {
+      if (request !== catalogRequest.current) return;
       console.error('Error al cargar dashboards:', error);
       setAccessKeynames([]);
       setAccessDashboards([]);
       setAccessSections({});
+      setCatalogError(true);
+      throw error;
+    } finally {
+      if (request === catalogRequest.current) setCatalogReady(true);
     }
-  };
+  }, []);
 
   const loginUser = async (newUser: User) => {
     setAuthUser(newUser);
@@ -68,16 +85,19 @@ export const AuthContextProvider: React.FC<React.PropsWithChildren> = ({ childre
   };
 
   const logoutUser = async () => {
-    const storedUser = localStorage.getItem("user");
-    const userId = storedUser ? JSON.parse(storedUser)._id : null;
-
-    if (userId) {
-      await apiClient.post("/auth/logout", { userId });
+    catalogRequest.current++;
+    try {
+      await apiClient.post('/auth/logout', {});
+    } finally {
+      localStorage.removeItem("user");
+      delete apiClient.defaults.headers.common.Authorization;
+      delete apiClient.defaults.headers.Authorization;
+      setAuthUser(undefined);
+      setAccessKeynames([]);
+      setAccessSections({});
+      setAccessDashboards([]);
+      setDashboards([]); setCatalogReady(false); setCatalogError(false);
     }
-
-    localStorage.removeItem("user");
-    setAuthUser(undefined);
-    setAccessKeynames([]);
   };
 
   return (
@@ -93,7 +113,7 @@ export const AuthContextProvider: React.FC<React.PropsWithChildren> = ({ childre
         setSessionExpired,
         refreshAccessKeynames,
         accessSections,
-        accessDashboards
+        accessDashboards, dashboards, catalogReady, catalogError,
       }}
     >
       {children}

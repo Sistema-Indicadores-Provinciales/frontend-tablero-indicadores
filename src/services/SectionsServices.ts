@@ -22,7 +22,7 @@ export const sendEditSection = async (sectionId: string, show?: boolean, newName
 
 // SectionsServices.ts
 export const sendDeleteSection = async (sectionId: string) => {
-  return (await responseFormatter(apiClient.delete(`/sections/delete/${sectionId}`))).data;
+  return (await apiClient.delete(`/sections/delete/${sectionId}`)).data.data;
 };
 
 

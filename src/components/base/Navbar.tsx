@@ -21,7 +21,7 @@ const NavBar = ({ open, handleOpen }: propTypes) => {
   return (
     <AppBar position="fixed" style={navbarBackground} open={open} >
       <Toolbar > {/* variant="dense" */}
-        <IconButton color="inherit" onClick={handleOpen} edge="start" sx={{ mr: 2, ...(open && { display: 'none' }) }}>
+        <IconButton aria-label="Abrir menú" color="inherit" onClick={handleOpen} edge="start" sx={{ mr: 2, ...(open && { display: 'none' }) }}>
           <MenuIcon />
         </IconButton>
         <Typography variant="h6" textTransform='uppercase' fontWeight='bold' noWrap component="div" sx={{ flexGrow: 1 }} >{navbarContext.navTitle ?? 'TABLERO INDICADORES'}</Typography>

@@ -1,11 +1,6 @@
 import axios, { AxiosError, AxiosRequestConfig } from "axios";
 
-// Usa automáticamente localhost o la IP actual del frontend
-const API_URL = `${window.location.protocol}//${window.location.hostname}:${
-  import.meta.env.VITE_APP_SERVER_PORT || 3000
-}`;
-
-console.log(API_URL)
+import { API_URL } from './endpoints';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -63,7 +58,7 @@ function cloneConfigWithToken(orig: AxiosRequestConfig, token: string | null): A
 }
 
 // LLamada al refresh
-async function doRefresh(): Promise<string> {
+export async function doRefresh(): Promise<string> {
   const resp = await refreshClient.post("/auth/refresh", undefined, { withCredentials: true });
   const newToken = resp.data?.data?.access_token ?? resp.data?.access_token;
   if (!newToken) throw new Error("No access_token in refresh response");
@@ -75,7 +70,7 @@ async function doRefresh(): Promise<string> {
       const user = JSON.parse(raw);
       user.access_token = newToken;
       localStorage.setItem("user", JSON.stringify(user));
-      console.log(localStorage.getItem("user"))
+
     }
   } catch (e) {
     console.error("[Axios] failed to update localStorage with new token", e);
@@ -116,9 +111,9 @@ apiClient.interceptors.response.use(
   async (error: AxiosError & { config?: AxiosRequestConfig & { _retry?: boolean } }) => {
     const originalRequest = error.config!;
     const status = error.response?.status;
-    const resInfo = error.response?.data;
 
-    console.log(resInfo)
+
+
 
     if (!originalRequest) return Promise.reject(error);
 

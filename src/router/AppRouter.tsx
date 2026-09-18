@@ -1,57 +1,33 @@
-import { useContext, useEffect, useState } from 'react';
+import { lazy, Suspense, useContext } from 'react';
 import { RouterProvider, createBrowserRouter, Navigate } from 'react-router-dom';
-
-import { AuthContext } from '../contexts/AuthContext';
-
+import { AuthContext } from 'contexts/AuthContext';
 import Base from 'containers/base';
 import UserList from 'containers/user/UsersList';
 import DashboardList from 'containers/board/DashboardList';
-import Indexer from 'containers/common/Indexer';
 import LoginPage from 'containers/user/LoginPage';
+import DashboardPage, { MainIndex } from './DashboardPage';
 
-import { buildRoutesFromDashboards, buildIndexerRoutes } from './dynamicRoutes';
-import { getAllDashboards } from 'services/DashboardServices';
-import Dashboard from 'types/Dashboard';
+const ChartGenerator = lazy(() => import('containers/ChartGenerator'));
+const ConnectionsPage = lazy(() => import('containers/admin/ConnectionsPage'));
+function AdminPage({ children }: React.PropsWithChildren) {
+  const { authUser } = useContext(AuthContext);
+  if (!authUser) return <p>Cargando sesión…</p>;
+  return authUser.profileType === 'ADMIN' ? children : <Navigate to="/main" replace />;
+}
 
-const AppRouter = () => {
-  const { profileType, accessSections } = useContext(AuthContext);
-  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+// Keep the router mounted while the catalog and permissions refresh after saving.
+const router = createBrowserRouter([
+  { path: '/', element: <Base />, children: [
+    { index: true, element: <Navigate to="/main" replace /> },
+    { path: 'main', element: <MainIndex /> },
+    { path: 'generador', element: <Suspense fallback={<p>Cargando generador…</p>}><ChartGenerator /></Suspense> },
+    { path: 'usuarios', element: <AdminPage><UserList /></AdminPage> },
+    { path: 'tableros', element: <AdminPage><DashboardList /></AdminPage> },
+    { path: 'administracion/conexiones', element: <AdminPage><Suspense fallback={<p>Cargando conexiones…</p>}><ConnectionsPage /></Suspense></AdminPage> },
+    { path: ':dashboardKeyname/:sectionKeyname?', element: <DashboardPage /> },
+  ] },
+  { path: '/login', element: <LoginPage /> },
+  { path: '*', element: <Navigate to="/main" replace /> },
+]);
 
-  useEffect(() => {
-    getAllDashboards().then(res => {
-      setDashboards(res.data ?? []);
-    });
-  }, []);
-
-  const dynamicRoutes = buildRoutesFromDashboards(dashboards, accessSections);
-  const indexerRoutes = buildIndexerRoutes(dashboards);
-
-  const routes = [
-    {
-      path: '/',
-      element: <Base />,
-      children: [
-        { index: true, element: <Navigate to="/main" /> },
-        {
-          path: 'main',
-          element: <Indexer main title="indicadores provinciales" routes={indexerRoutes} />
-        },
-        ...dynamicRoutes,
-        ...(profileType === 'ADMIN'
-          ? [
-            { path: 'usuarios', element: <UserList /> },
-            { path: 'tableros', element: <DashboardList /> },
-          ]
-          : [])
-      ]
-    },
-    { path: 'login', element: <LoginPage /> },
-    { path: '*', element: <Navigate to="/" /> }
-  ];
-
-  const router = createBrowserRouter(routes);
-
-  return <RouterProvider router={router} />;
-};
-
-export default AppRouter;
+export default function AppRouter() { return <RouterProvider router={router} />; }
