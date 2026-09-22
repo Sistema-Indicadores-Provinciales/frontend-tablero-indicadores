@@ -46,3 +46,32 @@ export const buildSeriesByCategory = (
         };
     });
 };
+
+/**
+ * Cuenta cuántos registros pertenecen a cada categoría y los prepara
+ * para gráficos de torta.
+ *
+ * @param data Filas filtradas del Excel.
+ * @param categoryCol Columna categórica a contabilizar.
+ * @param fallbackLabel Etiqueta para valores vacíos o nulos.
+ */
+export const buildPieDataByCategory = (
+  data: Record<string, any>[],
+  categoryCol: string,
+  fallbackLabel = "SIN DATO",
+) => {
+  const counts = data.reduce<Record<string, number>>((acc, row) => {
+    const category = String(row[categoryCol] ?? "").trim() || fallbackLabel;
+
+    acc[category] = (acc[category] ?? 0) + 1;
+
+    return acc;
+  }, {});
+
+  return Object.entries(counts)
+    .map(([name, value]) => ({ name, value }))
+    .sort(
+      (a, b) =>
+        b.value - a.value || a.name.localeCompare(b.name, "es"),
+    );
+};

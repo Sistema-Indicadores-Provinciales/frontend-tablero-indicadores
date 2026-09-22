@@ -8,7 +8,9 @@ import DashboardLayout from "../../components/ui/DashboardLayout";
 import DashboardItem from "../../components/ui/DashboardItem";
 import FilterBar, { FilterConfig } from "../../components/ui/FilterBar";
 import MapsChart, {MapMarker} from "../../components/graphics/MapsChart";
+import { buildPieDataByCategory } from "../../utils/chartHelpers";
 import SummaryTree, { SummaryTreeNode } from "../../components/graphics/SummaryTree";
+import PieChart from "components/graphics/PieChart";
 
 const FILENAME = "BD SALUD - CENTROS DE SALUD Y HOSPITALES.xlsx";
 const SHEET_PRINCIPAL = "CENTROS DE SALUD";
@@ -160,16 +162,6 @@ const EfectoresDeSalud: React.FC = () => {
     },
 
     title: String(row["NOMBRE DEL ESTABLECIMIENTO"]),
-
-    data: {
-      establecimiento: row["NOMBRE DEL ESTABLECIMIENTO"],
-      localidad: row["LOCALIDAD"],
-      departamento: row["DEPARTAMENTO"],
-      tipo: row["TIPO"],
-      dependencia: row["DEPENDENCIA ADMINISTRATIVA"],
-      nivelAtencion: row["NIVEL DE ATENCIÓN"],
-      nivelComplejidad: row["NIVEL DE COMPLEJIDAD"],
-    },
   }));
 
   // Desglose de efectores por DEPENDENCIA ADMINISTRATIVA (ej: Provincial / Municipal)
@@ -195,6 +187,25 @@ const EfectoresDeSalud: React.FC = () => {
       })),
   };
 
+  const establecimientosPorDistrito = buildPieDataByCategory(
+    filteredData,
+    "DISTRITO",
+  );
+
+  const establecimientosPorAreaProgramatica = buildPieDataByCategory(
+    filteredData,
+    "ÁREA PROGRÁMATICA",
+  );
+
+  const establecimientosPorNivelAtencion = buildPieDataByCategory(
+    filteredData,
+    "NIVEL DE ATENCIÓN",
+  );
+
+  const establecimientosPorTipo = buildPieDataByCategory(
+    filteredData,
+    "TIPO",
+  );
   return (
     <DashboardLayout>
       <DashboardItem colSpan={12}>
@@ -234,19 +245,71 @@ const EfectoresDeSalud: React.FC = () => {
         </Box>
       </DashboardItem>
 
-      <DashboardItem colSpan={6}>
-        <SummaryTree
-          data={summaryData}
-          defaultCardProps={{ numberFormat: "integer" }}
+      <DashboardItem colSpan={4}>
+        <PieChart
+          data={establecimientosPorDistrito}
+          title="Establecimientos por distrito"
+          legendPosition="right"
+          legendFontSize={12}
+          numberFormat="integer"
+          maxSeries={9}
+          height={300}
+          showShadow={false}
         />
       </DashboardItem>
 
-      <DashboardItem colSpan={6} minHeight={600}>
+      <DashboardItem colSpan={4}>
+        <PieChart
+          data={establecimientosPorAreaProgramatica}
+          title="Establecimientos por área programática"
+          legendPosition="right"
+          legendFontSize={12}
+          numberFormat="integer"
+          maxSeries={9}
+          height={300}
+          showShadow={false}
+        />
+      </DashboardItem>
+
+      <DashboardItem colSpan={4}>
+        <PieChart
+          data={establecimientosPorNivelAtencion}
+          title="Establecimientos por nivel de atención"
+          legendPosition="right"
+          legendFontSize={12}
+          numberFormat="integer"
+          maxSeries={9}
+          height={300}
+          showShadow={false}
+        />
+      </DashboardItem>
+
+      <DashboardItem colSpan={4}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <SummaryTree
+            data={summaryData}
+            defaultCardProps={{ numberFormat: "integer" }}
+          />
+
+          <PieChart
+            data={establecimientosPorTipo}
+            title="Establecimientos por tipo"
+            legendPosition="right"
+            legendFontSize={12}
+            numberFormat="integer"
+            maxSeries={9}
+            height={300}
+            showShadow={false}
+          />
+        </Box>
+      </DashboardItem>
+
+      <DashboardItem colSpan={8} minHeight={620}>
         <MapsChart
           markers={markers}
           displayMode="markers"
           fitBounds
-          height="600px"
+          height="620px"
         />
       </DashboardItem>
     </DashboardLayout>

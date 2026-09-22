@@ -88,7 +88,6 @@ const Maps: React.FC<MapsProps> = ({
   onMarkerHover,
   onMarkerDragEnd,
 }) => {
-  console.log(GOOGLE_MAPS_API_KEY)
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const { isLoaded, loadError } = useJsApiLoader({
