@@ -8,6 +8,7 @@ import { analytics, errorMessage } from 'config/Analytics';
 export default function ConnectionsPage() {
   const { changeNavTitle } = useContext(NavbarContext);
   const [clientId, setClientId] = useState(''), [configured, setConfigured] = useState(false);
+  const [clientSecret, setClientSecret] = useState(''), [persistent, setPersistent] = useState(false);
   const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [retry, setRetry] = useState(0);
@@ -15,9 +16,10 @@ export default function ConnectionsPage() {
     changeNavTitle('Administración · Conexiones');
     const controller = new AbortController();
     setLoading(true); setError('');
-    analytics.get<{ client_id: string }>('/v2/google/status', { signal: controller.signal }).then(({ data }) => {
+    analytics.get<{ client_id: string; persistent_available?: boolean }>('/v2/google/status', { signal: controller.signal }).then(({ data }) => {
       const id = data.client_id || import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || '';
       setClientId(id); setConfigured(!!id);
+      setPersistent(!!data.persistent_available);
     }).catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -25,8 +27,9 @@ export default function ConnectionsPage() {
   const save = async () => {
     setSaving(true); setError(''); setNotice('');
     try {
-      await analytics.put('/v2/google/settings', { client_id: clientId.trim() });
-      setConfigured(true); setNotice('Configuración guardada. Cada usuario ya puede conectar su cuenta desde el generador.');
+      const { data } = await analytics.put('/v2/google/settings', { client_id: clientId.trim(), ...(clientSecret.trim() ? { client_secret: clientSecret.trim() } : {}) });
+      setClientSecret(''); setPersistent(!!data.persistent_available);
+      setConfigured(true); setNotice(data.persistent_available ? 'Conexión permanente habilitada. Cada usuario debe conectar Google una vez para guardar su autorización.' : 'Configuración guardada. Cada usuario ya puede conectar su cuenta desde el generador.');
     } catch (e) { setError(errorMessage(e)); }
     finally { setSaving(false); }
   };
@@ -45,10 +48,13 @@ export default function ConnectionsPage() {
         <li>Configurá Google Auth Platform y agregá las cuentas de prueba si la aplicación está en modo de prueba.</li>
         <li>Creá un cliente OAuth de tipo Aplicación web.</li>
         <li>Agregá <strong>{window.location.origin}</strong> en Orígenes de JavaScript autorizados. Incluí también http://localhost:5173 y http://localhost:5174 para desarrollo, y el dominio HTTPS cuando publiques el sistema.</li>
-        <li>Copiá el ID del cliente y pegalo abajo.</li>
+        <li>Copiá el ID del cliente y pegalo abajo. Para mantener las cuentas conectadas, copiá también el secreto de ese mismo cliente.</li>
       </Box>
       <Link href="https://developers.google.com/workspace/sheets/api/quickstart/js" target="_blank" rel="noopener noreferrer">Abrir la guía de Google</Link>
       <TextField label="ID de cliente OAuth" value={clientId} onChange={e => setClientId(e.target.value)} disabled={loading || saving} fullWidth placeholder="…apps.googleusercontent.com" helperText="Usá solo el identificador público. No pegues contraseñas, tokens ni el secreto del cliente." />
+      <TextField label="Secreto del cliente OAuth" type="password" autoComplete="new-password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} disabled={loading || saving} fullWidth helperText={persistent ? 'Ya hay un secreto configurado. Dejá este campo vacío para conservarlo, o ingresá uno nuevo para reemplazarlo.' : 'Se guarda cifrado en el servidor y no vuelve a mostrarse. No es tu contraseña de Google.'} />
+      <Alert severity={persistent ? 'success' : 'info'}>{persistent ? 'Las cuentas pueden permanecer conectadas por usuario.' : 'Falta el secreto del cliente para mantener las cuentas conectadas después de recargar.'}</Alert>
+      <Typography variant="body2" color="text.secondary">Si el proyecto de Google sigue en modo de prueba, Google vence estas autorizaciones a los 7 días. Al vencer, cada usuario tendrá que renovar la conexión.</Typography>
       <Typography variant="body2" color="text.secondary">El ID se guarda para todo el sistema. No hace falta reiniciar los servicios.</Typography>
       <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap><Button variant="contained" onClick={save} disabled={loading || saving || !/^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId.trim())}>{saving ? 'Guardando…' : 'Guardar configuración'}</Button><Button component={RouterLink} to="/generador">Ir al generador</Button></Stack>
     </Stack></Paper>

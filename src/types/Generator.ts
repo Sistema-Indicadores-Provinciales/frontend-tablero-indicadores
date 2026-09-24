@@ -18,6 +18,7 @@ export interface Preview {
 export interface ChartData {
   labels: Scalar[]; datasets: { label: string; data: (number | null)[]; x?: Scalar[] }[];
   filtered_rows: number; warnings: string[]; columns?: string[]; records?: Record<string, Scalar>[];
+  filter_options?: Record<string, { values: string[]; total: number }>;
 }
 export interface Widget { id: string; title: string; width: number; library: 'Plotly' | 'ECharts'; config: ChartConfig; }
 export interface SectionDestination { dashboardId: string; sectionId: string; }

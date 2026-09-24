@@ -1,6 +1,9 @@
 let scriptPromise: Promise<void> | null = null;
 interface TokenResponse { access_token?: string; error?: string; scope?: string; }
-interface GoogleIdentity { accounts: { oauth2: { initTokenClient(options: {
+interface GoogleIdentity { accounts: { oauth2: { initCodeClient(options: {
+  client_id: string; scope: string; ux_mode: 'popup'; select_account: boolean;
+  callback: (response: { code?: string; error?: string }) => void; error_callback: () => void;
+}): { requestCode(): void }; initTokenClient(options: {
   client_id: string; scope: string; callback: (response: TokenResponse) => void;
   error_callback: () => void;
 }): { requestAccessToken(): void }; revoke(token: string, callback: () => void): void } } }
@@ -35,3 +38,17 @@ export function connectGoogle(clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.
   });
 }
 export function disconnectGoogle(token: string) { identity()?.accounts?.oauth2.revoke(token, () => {}); }
+
+// The server exchanges this one-time code; Google tokens never reach browser storage.
+export function authorizeGoogle(clientId: string): Promise<string> {
+  const google = identity();
+  if (!google?.accounts?.oauth2) return Promise.reject(new Error('Google todavía está cargando. Intentá nuevamente.'));
+  return new Promise((resolve, reject) => {
+    google.accounts.oauth2.initCodeClient({
+      client_id: clientId, scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+      ux_mode: 'popup', select_account: true,
+      callback: response => response.code ? resolve(response.code) : reject(new Error('Google no autorizó la lectura de hojas.')),
+      error_callback: () => reject(new Error('La ventana de Google se cerró o fue bloqueada.')),
+    }).requestCode();
+  });
+}

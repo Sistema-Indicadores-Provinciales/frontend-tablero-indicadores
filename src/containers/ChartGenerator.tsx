@@ -45,6 +45,7 @@ export default function ChartGenerator() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [googleToken, setGoogleToken] = useState('');
+  const [googleConnectionVersion, setGoogleConnectionVersion] = useState(0);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState('');
   const [name, setName] = useState('Mi tablero');
@@ -104,7 +105,7 @@ export default function ChartGenerator() {
       .then(({ data }) => { setSheets(data); setRead(prev => ({ ...prev, sheet: data.includes(prev.sheet) ? prev.sheet : data[0] || '' })); })
       .catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); });
     return () => controller.abort();
-  }, [sourceId, googleToken]);
+  }, [sourceId, googleToken, googleConnectionVersion]);
   useEffect(() => {
     setPreview(null);
     if (!sourceId || !read.sheet) return;
@@ -121,7 +122,7 @@ export default function ChartGenerator() {
       .catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); })
       .finally(() => { if (!controller.signal.aborted) setReading(false); });
     return () => controller.abort();
-  }, [sourceId, read, googleToken]);
+  }, [sourceId, read, googleToken, googleConnectionVersion]);
   const selectSource = (id: string) => {
     invalidate(); setPublication(null); setSourceId(id); setRead(initialRead); setFilters({});
     if (!workspaceId) setWidgets([newWidget()]);
@@ -228,7 +229,7 @@ export default function ChartGenerator() {
         Subir archivo o arrastrarlo aquí · XLSX, XLSM, XLS, CSV, TSV · hasta 25 MB
         <input aria-label="Subir archivo" type="file" accept=".xlsx,.xlsm,.xls,.csv,.tsv" disabled={busy} onChange={e => { upload(e.target.files?.[0]); e.target.value = ''; }} />
       </label>
-      <GoogleConnectionPanel token={googleToken} onToken={token => { invalidate(); setGoogleToken(token); }} busy={busy} onUseSheet={linkGoogle} />
+      <GoogleConnectionPanel token={googleToken} onToken={token => { invalidate(); setGoogleToken(token); }} onConnectionChange={() => { invalidate(); setGoogleConnectionVersion(v => v + 1); }} busy={busy} onUseSheet={linkGoogle} />
       {busy && <p role="status">Procesando…</p>}
     </section>
     {sourceId && <section className="generator-panel"><h2>2. Revisar la lectura · {source?.name}</h2>

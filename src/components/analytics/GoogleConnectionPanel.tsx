@@ -5,12 +5,12 @@ import GoogleIcon from '@mui/icons-material/Google';
 import { isAxiosError } from 'axios';
 import { AuthContext } from 'contexts/AuthContext';
 import { analytics, errorMessage } from 'config/Analytics';
-import { connectGoogle, disconnectGoogle, loadGoogleIdentity } from 'config/googleSheets';
+import { authorizeGoogle, connectGoogle, disconnectGoogle, loadGoogleIdentity } from 'config/googleSheets';
 
-interface Settings { client_id: string; public_access: boolean; }
-interface Props { token: string; onToken: (token: string) => void; busy?: boolean; onUseSheet?: (url: string, token: string) => Promise<void>; }
+interface Settings { client_id: string; public_access: boolean; persistent_available?: boolean; connected?: boolean; }
+interface Props { token: string; onToken: (token: string) => void; onConnectionChange?: () => void; busy?: boolean; onUseSheet?: (url: string, token: string) => Promise<void>; }
 
-export default function GoogleConnectionPanel({ token, onToken, busy = false, onUseSheet }: Props) {
+export default function GoogleConnectionPanel({ token, onToken, onConnectionChange, busy = false, onUseSheet }: Props) {
   const { profileType } = useContext(AuthContext);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [ready, setReady] = useState(false), [working, setWorking] = useState(false);
@@ -20,6 +20,7 @@ export default function GoogleConnectionPanel({ token, onToken, busy = false, on
   const [retry, setRetry] = useState(0);
   const configuredId = settings?.client_id || import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || '';
   const isAdmin = profileType === 'ADMIN';
+  const connected = !!token || !!settings?.connected;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -55,31 +56,49 @@ export default function GoogleConnectionPanel({ token, onToken, busy = false, on
   const connect = () => {
     setError(''); setWorking(true);
     // Start consent directly inside the click, before any HTTP request.
-    connectGoogle(configuredId).then(async value => {
-      onToken(value);
-      await useSheet(value);
+    const persistent = settings?.persistent_available;
+    (persistent ? authorizeGoogle(configuredId) : connectGoogle(configuredId)).then(async value => {
+      if (persistent) {
+        const { data } = await analytics.post<Settings>('/v2/google/connect', { code: value, client_id: configuredId }, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        setSettings(data); onToken(''); onConnectionChange?.();
+        await useSheet('');
+      } else {
+        onToken(value);
+        await useSheet(value);
+      }
     }).catch(e => setError(errorMessage(e))).finally(() => setWorking(false));
+  };
+  const disconnect = async () => {
+    setError(''); setWorking(true);
+    try {
+      const { data } = await analytics.delete<{ revoked: boolean }>('/v2/google/connection');
+      if (token) disconnectGoogle(token);
+      onToken(''); setSettings(prev => prev ? { ...prev, connected: false } : prev); onConnectionChange?.();
+      if (!data.revoked) setError('Se desconectó del sistema. Google no respondió al quitar el permiso; podés retirarlo también desde tu cuenta Google.');
+    } catch (e) { setError(errorMessage(e)); }
+    finally { setWorking(false); }
   };
   return <Box component="section" aria-label="Google Sheets" sx={{ p: 2.5, mt: 2, border: '1px solid #dbe3ec', borderRadius: 2, bgcolor: '#f7fafc' }}>
     <Stack spacing={2}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
         <Typography variant="h6" component="h3" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><GoogleIcon sx={{ color: '#00558a' }} /> Google Sheets</Typography>
-        {token && <Chip size="small" color="success" label="Cuenta conectada" />}
+        {connected && <Chip size="small" color="success" label="Cuenta conectada" />}
       </Stack>
-      <Typography variant="body2">{onUseSheet ? 'Pegá el enlace de la pestaña que querés usar. Si es pública, podés continuar sin conectar una cuenta.' : 'Para leer esta hoja privada, conectá una cuenta de Google que tenga acceso.'}</Typography>
+      <Typography variant="body2">{onUseSheet ? 'Pegá el enlace de la pestaña que querés usar. Si es pública, podés continuar sin conectar una cuenta.' : connected ? 'Esta sección consulta Google Sheets con la cuenta conectada a tu usuario.' : 'Para leer esta hoja privada, conectá una cuenta de Google que tenga acceso.'}</Typography>
       {onUseSheet && <TextField label="Enlace de Google Sheets" value={url} onChange={e => { setUrl(e.target.value); setError(''); setNeedsAccount(false); }} placeholder="Pegá aquí el enlace de tu hoja" fullWidth size="small" disabled={busy || working} />}
       {error && <Alert severity="error">{error}</Alert>}
       <Stack direction="row" gap={1.5} flexWrap="wrap">
         {onUseSheet && <Button variant="contained" disabled={busy || working || !url.trim()} onClick={useLink} sx={{ bgcolor: '#003667' }}>{working ? 'Cargando…' : 'Usar hoja'}</Button>}
-        {configuredId && !token && <Button variant={onUseSheet ? 'outlined' : 'contained'} startIcon={<GoogleIcon />} disabled={!ready || busy || working} onClick={connect}>{!ready ? 'Preparando Google…' : 'Conectar Google'}</Button>}
-        {token && <Button disabled={!ready || busy || working} onClick={connect}>Cambiar / renovar cuenta</Button>}
-        {token && <Button disabled={busy || working} onClick={() => { disconnectGoogle(token); onToken(''); }}>Desconectar cuenta</Button>}
+        {configuredId && !connected && <Button variant={onUseSheet ? 'outlined' : 'contained'} startIcon={<GoogleIcon />} disabled={!ready || busy || working} onClick={connect}>{!ready ? 'Preparando Google…' : 'Conectar Google'}</Button>}
+        {connected && <Button disabled={!ready || busy || working} onClick={connect}>Cambiar / renovar cuenta</Button>}
+        {connected && <Button disabled={busy || working} onClick={disconnect}>Desconectar cuenta</Button>}
       </Stack>
       {settingsError && <Alert severity="warning" action={<Button onClick={() => setRetry(v => v + 1)}>Reintentar</Button>}>No se pudo preparar la conexión de cuentas Google. Podés seguir usando enlaces públicos.</Alert>}
       {needsAccount && settings && !configuredId && <Alert severity="info">
         El acceso a hojas privadas todavía no está habilitado. {isAdmin ? <Link component={RouterLink} to="/administracion/conexiones">Habilitarlo desde Administración → Conexiones</Link> : 'Un administrador debe habilitarlo desde Administración → Conexiones.'}
       </Alert>}
-      {configuredId && !token && <Typography variant="body2" color="text.secondary">Si la hoja es privada, usá Conectar Google y autorizá su lectura.</Typography>}
+      {settings?.persistent_available && <Typography variant="body2" color="text.secondary">La conexión se guarda para tu usuario y se mantiene al recargar o volver a ingresar. Podés desconectarla cuando quieras.</Typography>}
+      {configuredId && settings && !settings.persistent_available && <Alert severity="info">La conexión actual dura mientras esta página esté abierta. {isAdmin ? <Link component={RouterLink} to="/administracion/conexiones">Habilitar conexión permanente</Link> : 'Un administrador puede habilitar que tu cuenta quede conectada.'}</Alert>}
       {onUseSheet && <Box component="details"><Typography component="summary" variant="body2" sx={{ cursor: 'pointer', color: '#00558a' }}>Cómo usar un enlace público</Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>Podés usar una hoja que permita lectura a cualquier persona con el enlace, o el enlace de Archivo → Compartir → Publicar en la Web. Se vincula la pestaña indicada; si el enlace no indica una, se usa la primera disponible. Para otra pestaña, pegá su enlace.</Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>Mantené privadas las hojas que necesiten acceso restringido y usá Conectar Google para leerlas.</Typography>
