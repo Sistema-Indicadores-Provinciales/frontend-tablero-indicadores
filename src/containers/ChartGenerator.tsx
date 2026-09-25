@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '@iconify/react';
+import { isAxiosError } from 'axios';
 import { AuthContext } from 'contexts/AuthContext';
 import SaveDashboardDialog from 'components/analytics/SaveDashboardDialog';
 import { analytics, errorMessage } from 'config/Analytics';
@@ -31,6 +32,7 @@ export default function ChartGenerator() {
   const [saveError, setSaveError] = useState('');
   const [publication, setPublication] = useState<Publication | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [sourceId, setSourceId] = useState('');
   const [sheets, setSheets] = useState<string[]>([]);
   const [read, setRead] = useState<ReadConfig>(initialRead);
@@ -51,14 +53,24 @@ export default function ChartGenerator() {
   const [name, setName] = useState('Mi tablero');
   const requests = useRef<Record<string, AbortController>>({});
   const source = sources.find(s => s._id === sourceId);
+  const sourceReady = !!source;
+  const sourceMissing = sourcesLoaded && !!sourceId && !sourceReady;
   const headers = googleToken ? { 'X-Google-Access-Token': googleToken } : {};
   const invalidate = () => {
     Object.values(requests.current).forEach(r => r.abort()); requests.current = {};
     setResults({}); setRunning({}); setChartErrors({}); setNotice('');
   };
+  const removeMissingFile = (e: unknown) => {
+    if (source && source.kind !== 'google' && isAxiosError(e) && e.response?.status === 404) {
+      setSources(prev => prev.filter(s => s._id !== sourceId));
+      setError('');
+      return true;
+    }
+    return false;
+  };
   const reloadLists = async () => {
     const [s, w] = await Promise.all([analytics.get<Source[]>('/v2/sources'), analytics.get<Workspace[]>('/v2/workspaces')]);
-    setSources(s.data); setWorkspaces(w.data);
+    setSources(s.data); setSourcesLoaded(true); setWorkspaces(w.data);
   };
   const restoreSavedMenu = async () => {
     try {
@@ -75,6 +87,9 @@ export default function ChartGenerator() {
     changeNavTitle('Generador de gráficos');
     return () => { Object.values(requests.current).forEach(r => r.abort()); };
   }, []);
+  useEffect(() => {
+    if (sourceMissing) { invalidate(); setPreview(null); setReading(false); setSaveOpen(false); }
+  }, [sourceMissing]);
   useEffect(() => {
     if (editId) return;
     setDestination(null); setTargetError('');
@@ -99,32 +114,35 @@ export default function ChartGenerator() {
   }, [dashboardId, sectionId, editId, targetRetry]);
   useEffect(() => {
     setSheets([]); setPreview(null);
-    if (!sourceId) return;
+    if (!sourceId || !sourceReady) return;
     const controller = new AbortController();
     analytics.get<string[]>(`/v2/sources/${encodeURIComponent(sourceId)}/sheets`, { headers, signal: controller.signal })
-      .then(({ data }) => { setSheets(data); setRead(prev => ({ ...prev, sheet: data.includes(prev.sheet) ? prev.sheet : data[0] || '' })); })
-      .catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); });
+      .then(({ data }) => { if (!controller.signal.aborted) { setSheets(data); setRead(prev => ({ ...prev, sheet: data.includes(prev.sheet) ? prev.sheet : data[0] || '' })); } })
+      .catch(e => { if (!controller.signal.aborted && !removeMissingFile(e)) setError(errorMessage(e)); });
     return () => controller.abort();
-  }, [sourceId, googleToken, googleConnectionVersion]);
+  }, [sourceId, sourceReady, googleToken, googleConnectionVersion]);
   useEffect(() => {
     setPreview(null);
-    if (!sourceId || !read.sheet) return;
+    setReading(false);
+    if (!sourceId || !sourceReady || !sheets.includes(read.sheet)) return;
     const controller = new AbortController();
     setReading(true); setError('');
     analytics.post<Preview>(`/v2/sources/${encodeURIComponent(sourceId)}/preview`, read, { headers, signal: controller.signal })
       .then(({ data }) => {
+        if (controller.signal.aborted) return;
         setPreview(data);
         setWidgets(prev => prev.map(w => ({ ...w, config: { ...w.config,
           x_col: data.columns.includes(w.config.x_col) ? w.config.x_col : data.columns[0],
           y_col: data.columns.includes(w.config.y_col) ? w.config.y_col : data.columns.find(c => data.column_meta[c].type === 'number') || data.columns[0],
         } })));
       })
-      .catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); })
+      .catch(e => { if (!controller.signal.aborted && !removeMissingFile(e)) setError(errorMessage(e)); })
       .finally(() => { if (!controller.signal.aborted) setReading(false); });
     return () => controller.abort();
-  }, [sourceId, read, googleToken, googleConnectionVersion]);
+  }, [sourceId, sourceReady, sheets, read, googleToken, googleConnectionVersion]);
   const selectSource = (id: string) => {
-    invalidate(); setPublication(null); setSourceId(id); setRead(initialRead); setFilters({});
+    invalidate(); setPublication(null); setSourceId(id);
+    if (!(workspaceId && sourceMissing)) { setRead(initialRead); setFilters({}); }
     if (!workspaceId) setWidgets([newWidget()]);
     setError('');
   };
@@ -143,7 +161,7 @@ export default function ChartGenerator() {
     try {
       const { data } = await analytics.post<ChartData>(`/v2/sources/${encodeURIComponent(sourceId)}/chart`, { ...widget.config, ...read, filters }, { headers, signal: controller.signal });
       if (!controller.signal.aborted) setResults(prev => ({ ...prev, [widget.id]: data }));
-    } catch (e) { if (!controller.signal.aborted) setChartErrors(prev => ({ ...prev, [widget.id]: errorMessage(e) })); }
+    } catch (e) { if (!controller.signal.aborted && !removeMissingFile(e)) setChartErrors(prev => ({ ...prev, [widget.id]: errorMessage(e) })); }
     finally { if (!controller.signal.aborted) setRunning(prev => ({ ...prev, [widget.id]: false })); }
   };
   const upload = async (file?: File) => {
@@ -223,8 +241,11 @@ export default function ChartGenerator() {
     </section>
     <section className="generator-panel"><h2>1. Fuente de datos</h2>
       <div className="generator-controls">
-        <label>Archivos disponibles<select value={sourceId} onChange={e => selectSource(e.target.value)} disabled={busy}><option value="">Elegir fuente</option>{sources.map(s => <option key={s._id} value={s._id}>{s.name} ({s.kind === 'system' ? 'sistema' : s.kind === 'google' ? 'Google Sheets' : 'propio'})</option>)}</select></label>
+        <label>Archivos disponibles<select value={sourceReady ? sourceId : ''} onChange={e => selectSource(e.target.value)} disabled={busy || !sourcesLoaded}><option value="">Elegir fuente</option>{sources.map(s => <option key={s._id} value={s._id}>{s.name} ({s.kind === 'system' ? 'sistema' : s.kind === 'google' ? 'Google Sheets' : 'propio'})</option>)}</select></label>
       </div>
+      <p className="generator-hint">La lista incluye archivos disponibles en este servidor y tus hojas de Google Sheets. Si falta un archivo, podés volver a subirlo.</p>
+      {sourcesLoaded && sources.length === 0 && <p role="status">Todavía no hay fuentes disponibles. Subí un archivo o vinculá una hoja de Google Sheets.</p>}
+      {sourceMissing && <p role="alert" className="generator-error">{workspaceId ? 'La fuente de este tablero no está disponible. Conservamos la configuración de tus gráficos.' : 'El archivo seleccionado ya no está disponible.'} Volvé a subir el archivo o elegí otra fuente para continuar.</p>}
       <label className="generator-drop" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (!busy) upload(e.dataTransfer.files[0]); }}>
         Subir archivo o arrastrarlo aquí · XLSX, XLSM, XLS, CSV, TSV · hasta 25 MB
         <input aria-label="Subir archivo" type="file" accept=".xlsx,.xlsm,.xls,.csv,.tsv" disabled={busy} onChange={e => { upload(e.target.files?.[0]); e.target.value = ''; }} />
@@ -232,7 +253,7 @@ export default function ChartGenerator() {
       <GoogleConnectionPanel token={googleToken} onToken={token => { invalidate(); setGoogleToken(token); }} onConnectionChange={() => { invalidate(); setGoogleConnectionVersion(v => v + 1); }} busy={busy} onUseSheet={linkGoogle} />
       {busy && <p role="status">Procesando…</p>}
     </section>
-    {sourceId && <section className="generator-panel"><h2>2. Revisar la lectura · {source?.name}</h2>
+    {sourceReady && <section className="generator-panel"><h2>2. Revisar la lectura · {source?.name}</h2>
       <div className="generator-controls">
         <label>Hoja<select value={read.sheet} onChange={e => changeRead({ sheet: e.target.value, types: {} })}><option value="">Elegir hoja</option>{sheets.map(s => <option key={s}>{s}</option>)}</select></label>
         <label>Fila de encabezados (0 = sin encabezados)<input type="number" min={0} max={100000} value={read.header_row} onChange={e => changeRead({ header_row: Math.max(0, Number(e.target.value)), types: {} })} /></label>
@@ -247,7 +268,7 @@ export default function ChartGenerator() {
         <div className="generator-table"><table><thead><tr>{preview.columns.map(c => <th key={c}>{c}<select aria-label={`Tipo de ${c}`} value={read.types[c] || 'auto'} onChange={e => changeRead({ types: { ...read.types, [c]: e.target.value } })}><option value="auto">Detectar ({preview.column_meta[c].type})</option><option value="text">Texto</option><option value="number">Número / porcentaje</option><option value="date">Fecha</option><option value="boolean">Sí / No</option></select></th>)}</tr></thead><tbody>{preview.preview.map((r, i) => <tr key={i}>{preview.columns.map(c => <td key={c}>{String(r[c] ?? '—')}</td>)}</tr>)}</tbody></table></div>
       </>}
     </section>}
-    {preview && <>
+    {sourceReady && preview && <>
       <section className="generator-panel"><h2>3. Filtros</h2><p className="generator-hint">Sin selección se incluyen todos los valores. Después de cambiar filtros, generá nuevamente cada gráfico.</p><div className="generator-controls">
         {preview.columns.map(c => <label key={c}>{c}<input placeholder="Valores separados por ;" value={(filters[c] || []).join(';')} onChange={e => { invalidate(); setFilters(prev => ({ ...prev, [c]: e.target.value ? e.target.value.split(';') : [] })); }} list={`values-${encodeURIComponent(c)}`} /><datalist id={`values-${encodeURIComponent(c)}`}>{preview.column_meta[c].unique_values.map((v, i) => <option key={i} value={String(v)} />)}</datalist></label>)}
         <button onClick={() => { invalidate(); setFilters({}); }}>Limpiar filtros</button>
