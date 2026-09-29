@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from 'react'
-import { Box, CssBaseline } from '@mui/material'
+import { Box } from '@mui/material'
 import { useTheme } from '@mui/material/styles';
 import Main from 'styled-components/base/Main';
 import NavBar from 'components/base/Navbar';
@@ -60,10 +60,9 @@ const Base = () => {
   return (
     <NavbarContextProvider>
       <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-        <CssBaseline />
         <NavBar open={open} handleOpen={handleDrawerOpen} />
         <Sidebar theme={theme} open={open} handleClose={handleDrawerClose} />
-        <Main sx={{ backgroundColor: '#EEEEEE' }} open={open}>
+        <Main sx={{ backgroundColor: 'background.default' }} open={open}>
           <Outlet />
         </Main>
       </Box>

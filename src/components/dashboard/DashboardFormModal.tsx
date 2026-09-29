@@ -188,7 +188,7 @@ const DashboardFormModal: React.FC<DashboardFormModalProps> = (props) => {
               </Button>
               {form.icon && (
                 <Box mt={1}>
-                  <Icon icon={form.icon} style={{ fontSize: '36px', color: '#000' }} />
+                  <Icon icon={form.icon} style={{ fontSize: '36px', color: 'var(--app-text)' }} />
                 </Box>
               )}
               <Collapse in={showIconPicker}>
@@ -211,7 +211,7 @@ const DashboardFormModal: React.FC<DashboardFormModalProps> = (props) => {
                           onClick={() => handleIconSelect(iconName)}
                           style={{ minWidth: 'auto', padding: 8 }}
                         >
-                          <Icon icon={iconName} style={{ fontSize: '36px', color: '#000' }} />
+                          <Icon icon={iconName} style={{ fontSize: '36px', color: 'var(--app-text)' }} />
                         </Button>
                       </div>
                     );
@@ -253,7 +253,7 @@ const DashboardFormModal: React.FC<DashboardFormModalProps> = (props) => {
               </Button>
               {form.icon && (
                 <Box mt={1}>
-                  <Icon icon={form.icon} style={{ fontSize: '36px', color: '#000' }} />
+                  <Icon icon={form.icon} style={{ fontSize: '36px', color: 'var(--app-text)' }} />
                 </Box>
               )}
               <Collapse in={showIconPicker}>
@@ -276,7 +276,7 @@ const DashboardFormModal: React.FC<DashboardFormModalProps> = (props) => {
                           onClick={() => handleIconSelect(iconName)}
                           style={{ minWidth: 'auto', padding: 8 }}
                         >
-                          <Icon icon={iconName} style={{ fontSize: '36px', color: '#000' }} />
+                          <Icon icon={iconName} style={{ fontSize: '36px', color: 'var(--app-text)' }} />
                         </Button>
                       </div>
                     );

@@ -35,9 +35,9 @@ export default function ConnectionsPage() {
   };
   return <Box sx={{ maxWidth: 900, mx: 'auto' }}>
     <Typography variant="overline" color="text.secondary">ADMINISTRACIÓN</Typography>
-    <Typography component="h1" variant="h4" sx={{ mb: 3, color: '#003667' }}>Conexiones del sistema</Typography>
+    <Typography component="h1" variant="h4" sx={{ mb: 3, color: 'text.primary' }}>Conexiones del sistema</Typography>
     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 4 }, borderRadius: 3 }}><Stack spacing={3}>
-      <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap"><GoogleIcon sx={{ color: '#00558a' }} /><Typography component="h2" variant="h5">Google Sheets</Typography><Chip size="small" label={configured ? 'Cliente configurado' : 'Privadas: configuración pendiente'} /></Stack>
+      <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap"><GoogleIcon color="secondary" /><Typography component="h2" variant="h5">Google Sheets</Typography><Chip size="small" label={configured ? 'Cliente configurado' : 'Privadas: configuración pendiente'} /></Stack>
       <Alert severity="success">Los enlaces públicos ya funcionan sin configurar una cuenta de Google.</Alert>
       <Typography>Para usar hojas privadas, un administrador debe habilitar esta conexión una sola vez. Después, cada usuario elige su cuenta y autoriza la lectura desde el generador.</Typography>
       {loading && <Typography role="status">Cargando configuración…</Typography>}

@@ -78,17 +78,17 @@ export default function GoogleConnectionPanel({ token, onToken, onConnectionChan
     } catch (e) { setError(errorMessage(e)); }
     finally { setWorking(false); }
   };
-  return <Box component="section" aria-label="Google Sheets" sx={{ p: 2.5, mt: 2, border: '1px solid #dbe3ec', borderRadius: 2, bgcolor: '#f7fafc' }}>
+  return <Box component="section" aria-label="Google Sheets" sx={{ p: 2.5, mt: 2, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'app.elevated' }}>
     <Stack spacing={2}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
-        <Typography variant="h6" component="h3" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><GoogleIcon sx={{ color: '#00558a' }} /> Google Sheets</Typography>
+        <Typography variant="h6" component="h3" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><GoogleIcon color="secondary" /> Google Sheets</Typography>
         {connected && <Chip size="small" color="success" label="Cuenta conectada" />}
       </Stack>
       <Typography variant="body2">{onUseSheet ? 'Pegá el enlace de la pestaña que querés usar. Si es pública, podés continuar sin conectar una cuenta.' : connected ? 'Esta sección consulta Google Sheets con la cuenta conectada a tu usuario.' : 'Para leer esta hoja privada, conectá una cuenta de Google que tenga acceso.'}</Typography>
       {onUseSheet && <TextField label="Enlace de Google Sheets" value={url} onChange={e => { setUrl(e.target.value); setError(''); setNeedsAccount(false); }} placeholder="Pegá aquí el enlace de tu hoja" fullWidth size="small" disabled={busy || working} />}
       {error && <Alert severity="error">{error}</Alert>}
       <Stack direction="row" gap={1.5} flexWrap="wrap">
-        {onUseSheet && <Button variant="contained" disabled={busy || working || !url.trim()} onClick={useLink} sx={{ bgcolor: '#003667' }}>{working ? 'Cargando…' : 'Usar hoja'}</Button>}
+        {onUseSheet && <Button variant="contained" disabled={busy || working || !url.trim()} onClick={useLink}>{working ? 'Cargando…' : 'Usar hoja'}</Button>}
         {configuredId && !connected && <Button variant={onUseSheet ? 'outlined' : 'contained'} startIcon={<GoogleIcon />} disabled={!ready || busy || working} onClick={connect}>{!ready ? 'Preparando Google…' : 'Conectar Google'}</Button>}
         {connected && <Button disabled={!ready || busy || working} onClick={connect}>Cambiar / renovar cuenta</Button>}
         {connected && <Button disabled={busy || working} onClick={disconnect}>Desconectar cuenta</Button>}
@@ -99,7 +99,7 @@ export default function GoogleConnectionPanel({ token, onToken, onConnectionChan
       </Alert>}
       {settings?.persistent_available && <Typography variant="body2" color="text.secondary">La conexión se guarda para tu usuario y se mantiene al recargar o volver a ingresar. Podés desconectarla cuando quieras.</Typography>}
       {configuredId && settings && !settings.persistent_available && <Alert severity="info">La conexión actual dura mientras esta página esté abierta. {isAdmin ? <Link component={RouterLink} to="/administracion/conexiones">Habilitar conexión permanente</Link> : 'Un administrador puede habilitar que tu cuenta quede conectada.'}</Alert>}
-      {onUseSheet && <Box component="details"><Typography component="summary" variant="body2" sx={{ cursor: 'pointer', color: '#00558a' }}>Cómo usar un enlace público</Typography>
+      {onUseSheet && <Box component="details"><Typography component="summary" variant="body2" sx={{ cursor: 'pointer', color: 'secondary.main' }}>Cómo usar un enlace público</Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>Podés usar una hoja que permita lectura a cualquier persona con el enlace, o el enlace de Archivo → Compartir → Publicar en la Web. Se vincula la pestaña indicada; si el enlace no indica una, se usa la primera disponible. Para otra pestaña, pegá su enlace.</Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>Mantené privadas las hojas que necesiten acceso restringido y usá Conectar Google para leerlas.</Typography>
       </Box>}

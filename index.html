@@ -4,10 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/indicadores.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#003667" />
+    <meta name="theme-color" content="#eeeeee" />
     <title>Tablero de Indicadores Provinciales</title>
   </head>
   <body>
+    <script>
+      (() => {
+        let mode = 'light';
+        try {
+          const storedMode = localStorage.getItem('sip-theme-mode');
+          if (storedMode === 'light' || storedMode === 'dark') mode = storedMode;
+        } catch { /* El tema claro queda disponible si el navegador bloquea el almacenamiento. */ }
+        document.documentElement.classList.add(mode);
+        document.documentElement.style.colorScheme = mode;
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', mode === 'dark' ? '#0b1729' : '#eeeeee');
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

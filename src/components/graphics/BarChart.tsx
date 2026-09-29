@@ -4,12 +4,7 @@ import { getLegendLayout } from "../../utils/charts/legendLayout";
 import { ChartBaseProps } from './../../types/chartBaseProps';
 import { sortSeries } from "utils/charts/seriesSort";
 import { buildFormatter } from './../../utils/charts/numberFormat';
-
-const PALETTE = [
-    "#2563eb", "#e11d48", "#f97316", "#16a34a",
-    "#9333ea", "#0891b2", "#ca8a04", "#be123c",
-    "#15803d", "#7c3aed", "#0284c7", "#dc2626",
-];
+import { useChartTheme } from "utils/charts/chartTheme";
 
 export interface BarSeries {
     name: string;
@@ -88,13 +83,14 @@ const BarChart: React.FC<Props> = ({
 
     // Estilo
     height = 400,
-    backgroundColor = "#ffffff",
+    backgroundColor,
     borderRadius = 8,
     showShadow = true,
 
     // Específico BarChart
     stacked = false,
 }) => {
+    const chartTheme = useChartTheme();
     if (!series?.length) return null;
 
     const processedSeries = sortSeries(
@@ -115,28 +111,30 @@ const BarChart: React.FC<Props> = ({
         legendPosition,
         shouldShowLegend,
         hasTitle,
+        chartTheme.textSecondary,
     );
 
     const format = buildFormatter({ numberFormat, decimals, numberPrefix, numberSuffix, valueFormatter });
 
+    const chartBackground = backgroundColor ?? chartTheme.paper;
     const option = {
-        backgroundColor,
+        backgroundColor: chartBackground,
         title: hasTitle ? {
             text: title,
             left: "center",
             top: 10,
             textStyle: {
                 fontSize: 15,
-                color: "#1e293b",
+                color: chartTheme.text,
                 fontFamily: "IBM Plex Sans, sans-serif",
                 fontWeight: 600,
             },
         } : undefined,
         tooltip: {
             trigger: "axis",
-            backgroundColor: "#1e293b",
-            borderColor: "#334155",
-            textStyle: { color: "#f8fafc", fontSize: 12 },
+            backgroundColor: chartTheme.tooltipBackground,
+            borderColor: chartTheme.border,
+            textStyle: { color: chartTheme.tooltipText, fontSize: 12 },
             axisPointer: { type: "shadow" }, // solo en BarChart
             formatter: (params: any[]) => {
                 const header = `<b>${params[0].axisValue}</b><br/>`;
@@ -163,8 +161,9 @@ const BarChart: React.FC<Props> = ({
             name: showXTitle ? xLabel : "",
             nameLocation: "middle",
             nameGap: shouldShowLegend && legendPosition.startsWith("bottom") ? 45 : 35,
-            axisLabel: { rotate: -35, fontSize: 11, color: "#475569" },
-            axisLine: { lineStyle: { color: "#475569" } },
+            axisLabel: { rotate: -35, fontSize: 11, color: chartTheme.textSecondary },
+            axisLine: { lineStyle: { color: chartTheme.border } },
+            nameTextStyle: { color: chartTheme.textSecondary },
         },
         yAxis: {
             type: "value",
@@ -176,10 +175,11 @@ const BarChart: React.FC<Props> = ({
             max: yMax,
             axisLabel: {
                 fontSize: 11,
-                color: "#475569",
+                color: chartTheme.textSecondary,
                 formatter: (val: number) => format(val),
             },
-            splitLine: { lineStyle: { color: "#f1f5f9" } },
+            splitLine: { lineStyle: { color: chartTheme.grid } },
+            nameTextStyle: { color: chartTheme.textSecondary },
         },
         series: processedSeries.map((s, i) => ({
             name: s.name,
@@ -187,18 +187,19 @@ const BarChart: React.FC<Props> = ({
             data: s.y,
             stack: stacked ? "total" : undefined,
             itemStyle: {
-                color: PALETTE[i % PALETTE.length],
+                color: chartTheme.colors[i % chartTheme.colors.length],
                 opacity: 0.92,
                 borderRadius: stacked ? 0 : [3, 3, 0, 0],
             },
             label: {
                 show: showDataLabels,
+                color: chartTheme.text,
                 position: stacked ? "inside" : "top",
                 fontSize: 11,
                 formatter: (p: any) => p.value != null ? format(p.value) : "",
             },
         })),
-        color: PALETTE,
+        color: chartTheme.colors,
     };
 
     return (
@@ -208,9 +209,10 @@ const BarChart: React.FC<Props> = ({
                 width: "100%",
                 height: `${height}px`,
                 borderRadius: `${borderRadius}px`,
-                boxShadow: showShadow ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                boxShadow: showShadow ? chartTheme.shadow : "none",
+                backgroundColor: chartBackground,
             }}
-            notMerge
+            replaceMerge={["series", "xAxis", "yAxis", "title"]}
             lazyUpdate
         />
     );

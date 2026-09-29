@@ -1,11 +1,6 @@
 import React from "react";
 import Plot from "react-plotly.js";
-
-const PALETTE = [
-    "#2563eb", "#e11d48", "#f97316", "#16a34a",
-    "#9333ea", "#0891b2", "#ca8a04", "#be123c",
-    "#15803d", "#7c3aed", "#0284c7", "#dc2626",
-];
+import { useChartTheme } from "utils/charts/chartTheme";
 
 export interface BarSeries {
     name: string;
@@ -30,6 +25,7 @@ const BarChartPlotly: React.FC<Props> = ({
     height = 400,
     stacked = false,
 }) => {
+    const chartTheme = useChartTheme();
     if (!series?.length) return null;
 
     const traces = series.map((s, i) => ({
@@ -38,7 +34,7 @@ const BarChartPlotly: React.FC<Props> = ({
         name: s.name,
         type: "bar" as const,
         marker: {
-            color: PALETTE[i % PALETTE.length],
+            color: chartTheme.colors[i % chartTheme.colors.length],
             opacity: 0.92,
         },
         hovertemplate: `<b>%{fullData.name}</b><br>${xLabel}: %{x}<br>${yLabel}: <b>%{y:,.2f}</b><extra></extra>`,
@@ -50,17 +46,21 @@ const BarChartPlotly: React.FC<Props> = ({
         <Plot
             data={traces}
             layout={{
-                title: { text: title, font: { size: 16, color: "#1e293b" } },
+                title: { text: title, font: { size: 16, color: chartTheme.text } },
+                font: { family: chartTheme.fontFamily, color: chartTheme.text },
+                uirevision: `${title}|${xLabel}|${yLabel}|${series.map(s => s.name).join('|')}`,
                 xaxis: {
-                    title: { text: xLabel, font: { size: 13 } },
+                    title: { text: xLabel, font: { size: 13, color: chartTheme.textSecondary } },
+                    tickfont: { color: chartTheme.textSecondary },
                     tickangle: -35,
-                    gridcolor: "#f1f5f9",
-                    linecolor: "#e2e8f0",
+                    gridcolor: chartTheme.grid,
+                    linecolor: chartTheme.border,
                 },
                 yaxis: {
-                    title: { text: yLabel, font: { size: 13 } },
-                    gridcolor: "#f1f5f9",
-                    linecolor: "#e2e8f0",
+                    title: { text: yLabel, font: { size: 13, color: chartTheme.textSecondary } },
+                    tickfont: { color: chartTheme.textSecondary },
+                    gridcolor: chartTheme.grid,
+                    linecolor: chartTheme.border,
                     tickformat: ",~f",
                 },
                 barmode: stacked ? "stack" : "group",
@@ -70,18 +70,18 @@ const BarChartPlotly: React.FC<Props> = ({
                     orientation: "h",
                     y: -0.25,
                     x: 0,
-                    font: { size: 11, color: "#475569" },
+                    font: { size: 11, color: chartTheme.textSecondary },
                     bgcolor: "rgba(0,0,0,0)",
                 } : undefined,
                 showlegend: hasMultipleSeries,
-                plot_bgcolor: "#ffffff",
-                paper_bgcolor: "#ffffff",
+                plot_bgcolor: chartTheme.paper,
+                paper_bgcolor: chartTheme.paper,
                 margin: { t: 60, b: hasMultipleSeries ? 110 : 70, l: 70, r: 20 },
                 hovermode: "x unified",
                 hoverlabel: {
-                    bgcolor: "#1e293b",
-                    bordercolor: "#334155",
-                    font: { family: "IBM Plex Sans, sans-serif", size: 12, color: "#f8fafc" },
+                    bgcolor: chartTheme.tooltipBackground,
+                    bordercolor: chartTheme.border,
+                    font: { family: chartTheme.fontFamily, size: 12, color: chartTheme.tooltipText },
                     align: "left",
                     namelength: -1,
                 },

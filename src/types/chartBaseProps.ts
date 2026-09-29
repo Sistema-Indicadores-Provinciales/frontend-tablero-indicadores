@@ -50,7 +50,7 @@ export interface ChartBaseProps extends NumberFormatProps {
     // ─── Estilo general ───────────────────────────────────────
     /** Altura del gráfico en px. Default: 400 */
     height?: number;
-    /** Color de fondo. Default: "#ffffff" */
+    /** Color de fondo. Default: el color de superficie del tema activo */
     backgroundColor?: string;
     /** Radio del borde en px. Default: 8 */
     borderRadius?: number;

@@ -1,4 +1,5 @@
-import { Box, Button, TextField, Typography, Container, CssBaseline, Alert, Collapse } from '@mui/material';
+import { Box, Button, TextField, Typography, Container, Alert, Collapse } from '@mui/material';
+import ThemeToggle from 'components/base/ThemeToggle';
 import { AuthContext } from 'contexts/AuthContext';
 import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -36,10 +37,13 @@ const LoginPage = () => {
         justifyContent: 'center',
         alignItems: 'center',
         height: '100dvh',
-        backgroundColor: '#f5f5f5',
+        position: 'relative',
+        backgroundColor: 'background.default',
       }}
     >
-      <CssBaseline />
+      <Box sx={{ position: 'absolute', top: 2, right: 2 }}>
+        <ThemeToggle />
+      </Box>
       <Box
         component="form"
         onSubmit={event => { event.preventDefault(); handleSendLogin(); }}
@@ -47,9 +51,9 @@ const LoginPage = () => {
           width: '100%',
           maxWidth: '400px',
           padding: '2rem',
-          backgroundColor: '#fff',
+          backgroundColor: 'background.paper',
           borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          boxShadow: theme => theme.shadows[3],
         }}
       >
         <Typography variant="h4" component="h1" gutterBottom align="center">

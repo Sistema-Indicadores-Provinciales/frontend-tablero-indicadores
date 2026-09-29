@@ -20,6 +20,7 @@ export const getLegendLayout = (
     position: LegendPosition,
     show: boolean,
     hasTitle: boolean,
+    textColor = "#475569",
 ): LegendLayoutResult => {
     if (!show) {
         return {
@@ -40,7 +41,7 @@ export const getLegendLayout = (
               : "center",
         right:  hAlign === "right"  ? 10    : undefined,
         orient: "horizontal" as const,
-        textStyle: { fontSize: 11, color: "#475569" },
+        textStyle: { fontSize: 11, color: textColor },
         itemGap: 16,
     };
 

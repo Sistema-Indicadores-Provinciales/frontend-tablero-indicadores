@@ -125,14 +125,15 @@ const Coparticipacion: React.FC = () => {
                             cursor: "pointer",
                             fontSize: "13px",
                             fontWeight: libreria === lib ? 700 : 400,
-                            border: libreria === lib ? "2px solid #2563eb" : "1px solid #cbd5e1",
-                            color: libreria === lib ? "#2563eb" : "#64748b",
-                            background: libreria === lib ? "#eff6ff" : "#fff",
+                            border: "1px solid",
+                            borderColor: libreria === lib ? "app.focus" : "app.controlBorder",
+                            color: libreria === lib ? "primary.main" : "text.secondary",
+                            background: libreria === lib ? "app.selected" : "background.paper",
                             userSelect: "none",
                             transition: "all 0.15s",
                             "&:hover": {
-                                borderColor: "#2563eb",
-                                color: "#2563eb",
+                                borderColor: "app.focus",
+                                color: "primary.main",
                             },
                         }}
                     >
@@ -147,10 +148,10 @@ const Coparticipacion: React.FC = () => {
                     onClick={() => { clearFilters(); setTipoVariacion(tiposVariacion.some(t => t.value === "VARIACIÓN INTERANUAL") ? "VARIACIÓN INTERANUAL" : String(tiposVariacion[0]?.value ?? "")); }}
                     sx={{
                         height: "36px",
-                        background: "#0f172a",
-                        color: "#fff",
+                        background: "primary.main",
+                        color: "primary.contrastText",
                         fontWeight: 700,
-                        "&:hover": { background: "#1e293b" },
+                        "&:hover": { background: "app.primaryHover" },
                     }}
                 >
                     Limpiar filtros

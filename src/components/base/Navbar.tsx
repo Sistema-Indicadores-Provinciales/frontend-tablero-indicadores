@@ -1,10 +1,9 @@
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
-// import LightModeIcon from '@mui/icons-material/LightMode';
-// import DarkModeIcon from '@mui/icons-material/DarkMode';
 import MenuIcon from '@mui/icons-material/Menu';
 import AppBar from 'styled-components/base/AppBar';
+import ThemeToggle from './ThemeToggle';
 import { navbarBackground } from 'config/constants';
 import UserMenu from './UserMenu';
 import { useContext } from 'react';
@@ -25,14 +24,7 @@ const NavBar = ({ open, handleOpen }: propTypes) => {
           <MenuIcon />
         </IconButton>
         <Typography variant="h6" textTransform='uppercase' fontWeight='bold' noWrap component="div" sx={{ flexGrow: 1 }} >{navbarContext.navTitle ?? 'TABLERO INDICADORES'}</Typography>
-        {/* <IconButton
-          size="large"
-          aria-label="light or night"
-          color="inherit"
-          onClick={() => setMode(!mode)}
-        >
-          {mode ? <DarkModeIcon /> : <LightModeIcon />}
-        </IconButton> */}
+        <ThemeToggle />
         <UserMenu />
       </Toolbar>
     </AppBar>

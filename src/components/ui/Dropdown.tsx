@@ -193,9 +193,9 @@ const Dropdown: React.FC<Props> = ({
                     justifyContent: "space-between",
                     padding: "6px 10px",
                     border: "1px solid",
-                    borderColor: open ? "primary.main" : "#cbd5e1",
+                    borderColor: open ? "app.focus" : "app.controlBorder",
                     borderRadius: "6px",
-                    background: "#fff",
+                    background: "background.paper",
                     cursor: "pointer",
                     userSelect: "none",
                     "&:hover": { borderColor: "primary.main" },
@@ -204,7 +204,7 @@ const Dropdown: React.FC<Props> = ({
                 <Typography
                     sx={{
                         fontSize: "13px",
-                        color: "#1e293b",
+                        color: "text.primary",
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
@@ -214,8 +214,8 @@ const Dropdown: React.FC<Props> = ({
                     {getButtonText()}
                 </Typography>
                 {open
-                    ? <KeyboardArrowUpIcon sx={{ fontSize: 18, color: "#64748b", flexShrink: 0 }} />
-                    : <KeyboardArrowDownIcon sx={{ fontSize: 18, color: "#64748b", flexShrink: 0 }} />
+                    ? <KeyboardArrowUpIcon sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0 }} />
+                    : <KeyboardArrowDownIcon sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0 }} />
                 }
             </Box>
 
@@ -268,7 +268,7 @@ const Dropdown: React.FC<Props> = ({
                                     alignItems: "center",
                                     padding: "4px 12px",
                                     cursor: "pointer",
-                                    "&:hover": { background: "#f1f5f9" },
+                                    "&:hover": { background: "app.hover" },
                                 }}
                             >
                                 <Checkbox
@@ -288,7 +288,7 @@ const Dropdown: React.FC<Props> = ({
                     {/* Lista de opciones */}
                     <Box sx={{ overflowY: "auto", flex: 1 }}>
                         {filteredOptions.length === 0 ? (
-                            <Typography sx={{ fontSize: "13px", color: "#94a3b8", padding: "8px 12px" }}>
+                            <Typography sx={{ fontSize: "13px", color: "text.secondary", padding: "8px 12px" }}>
                                 Sin resultados
                             </Typography>
                         ) : filteredOptions.map(opt => (
@@ -308,8 +308,8 @@ const Dropdown: React.FC<Props> = ({
                                     justifyContent: multiple ? "space-between" : "flex-start",
                                     padding: multiple ? "4px 12px" : "8px 12px",
                                     cursor: "pointer",
-                                    background: !multiple && opt.value === value ? "#eff6ff" : "transparent",
-                                    "&:hover": { background: "#f1f5f9" },
+                                    background: !multiple && opt.value === value ? "app.selected" : "transparent",
+                                    "&:hover": { background: "app.hover" },
                                     "&:hover .dropdown-only-btn": { opacity: 1 },
                                 }}
                             >
@@ -324,7 +324,7 @@ const Dropdown: React.FC<Props> = ({
                                     <Typography
                                         sx={{
                                             fontSize: "13px",
-                                            color: !multiple && opt.value === value ? "primary.main" : "#1e293b",
+                                            color: !multiple && opt.value === value ? "primary.main" : "text.primary",
                                             fontWeight: !multiple && opt.value === value ? 600 : 400,
                                             whiteSpace: "nowrap",
                                             overflow: "hidden",

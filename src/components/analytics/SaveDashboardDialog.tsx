@@ -60,7 +60,7 @@ export default function SaveDashboardDialog({ open, workspaceId, name, busy, err
     finally { setChoosing(false); }
   };
   return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby="save-dashboard-title">
-    <DialogTitle id="save-dashboard-title" sx={{ background: 'linear-gradient(to right, #003667, #00558a)', color: 'white' }}>{target ? 'Guardar gráficos en la sección' : 'Guardar tablero en el menú'}</DialogTitle>
+    <DialogTitle id="save-dashboard-title" sx={{ background: 'var(--app-header-background)', color: 'var(--app-on-header)' }}>{target ? 'Guardar gráficos en la sección' : 'Guardar tablero en el menú'}</DialogTitle>
     <DialogContent sx={{ pt: '24px !important' }}>
       <Stack spacing={3}>
         <Typography color="text.secondary">{count} {count === 1 ? 'gráfico' : 'gráficos'} · Aparecerá en el menú lateral y en el índice de quienes tengan acceso.</Typography>
@@ -94,7 +94,7 @@ export default function SaveDashboardDialog({ open, workspaceId, name, busy, err
     </DialogContent>
     <DialogActions sx={{ px: 3, pb: 3 }}>
       <Button disabled={busy} onClick={onClose}>Cancelar</Button>
-      <Button variant="contained" sx={{ bgcolor: '#003667' }} disabled={busy || choosing || !!loadError || !options || !title.trim()} onClick={() => onSave(target?.sectionName || title.trim(), icon, options?.canShare ? recipients : undefined, target || undefined)}>{busy ? 'Guardando…' : 'Guardar y aplicar accesos'}</Button>
+      <Button variant="contained" disabled={busy || choosing || !!loadError || !options || !title.trim()} onClick={() => onSave(target?.sectionName || title.trim(), icon, options?.canShare ? recipients : undefined, target || undefined)}>{busy ? 'Guardando…' : 'Guardar y aplicar accesos'}</Button>
     </DialogActions>
   </Dialog>;
 }

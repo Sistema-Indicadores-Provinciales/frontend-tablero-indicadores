@@ -45,8 +45,8 @@ export default function SavedChart({ workspaceId, widget, googleToken }: { works
   const count = Object.values(filters).filter(values => values.length).length;
   return <section className="generator-panel generator-widget" aria-label={widget.title} style={{ gridColumn: `span ${widget.width}` }}>
     <h2>{widget.title}</h2>
-    {!!Object.keys(options).length && <Box component="section" aria-label={`Filtros de ${widget.title}`} sx={{ bgcolor: '#f7fafc', border: '1px solid #dbe3ec', borderRadius: 2, p: 2, mb: 2 }}>
-      <Stack direction="row" gap={1} alignItems="center" sx={{ mb: 1 }}><FilterAltOutlinedIcon sx={{ color: '#00558a' }} /><Typography fontWeight={600}>Filtrar este gráfico</Typography>{count > 0 && <Chip size="small" label={`${count} activos`} />}</Stack>
+    {!!Object.keys(options).length && <Box component="section" aria-label={`Filtros de ${widget.title}`} sx={{ bgcolor: 'app.elevated', border: 1, borderColor: 'divider', borderRadius: 2, p: 2, mb: 2 }}>
+      <Stack direction="row" gap={1} alignItems="center" sx={{ mb: 1 }}><FilterAltOutlinedIcon color="secondary" /><Typography fontWeight={600}>Filtrar este gráfico</Typography>{count > 0 && <Chip size="small" label={`${count} activos`} />}</Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Los filtros se aplican solo a tu vista, dentro de los datos guardados en el gráfico.</Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 2 }}>
         {Object.entries(options).map(([column, values]) => <Autocomplete key={column} multiple freeSolo size="small" options={values.values} value={draft[column] || []}
