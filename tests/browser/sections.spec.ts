@@ -4,7 +4,8 @@ const did = 'a'.repeat(24), sid = 'b'.repeat(24);
 async function system(page: Page, { emptySection = false, guest = false } = {}) {
   const target = { dashboardId: did, sectionId: sid, dashboardName: 'Equipamiento médico', sectionName: 'Inventario', path: '/equipamiento/inventario' };
   const state = { created: emptySection, workspace: null as any, recipients: ['owner', 'reader'], createFailure: false,
-    creationRequests: [] as any[], saves: [] as any[], publicationFailure: false };
+    creationRequests: [] as any[], saves: [] as any[], publicationFailure: false,
+    sources: [{ _id: 'file', name: 'Inventario.csv', kind: 'upload' }] };
   const userId = guest ? 'reader' : 'owner';
   const board = () => ({ _id: did, name: target.dashboardName, keyname: 'equipamiento', icon: 'material-symbols:medical-services', show: true,
     sections: state.created ? [{ _id: sid, name: target.sectionName, keyname: 'inventario', show: true, ...(state.workspace?.published ? { workspaceId: 'saved' } : {}) }] : [] });
@@ -37,9 +38,9 @@ async function system(page: Page, { emptySection = false, guest = false } = {}) 
       data = method === 'GET' && path === '/v2/workspaces' ? state.workspace ? [state.workspace] : [] : state.workspace;
     }
     else if (path === '/v2/workspaces/saved/view') data = { ...state.workspace, can_edit: !guest, source_kind: state.workspace?.source_id === 'google-source' ? 'google' : 'upload', source_access_mode: state.workspace?.source_id === 'google-source' ? 'public' : undefined };
-    else if (path === '/v2/sources') data = [{ _id: 'file', name: 'Inventario.csv', kind: 'upload' }];
-    else if (path === '/v2/sources/upload') data = { _id: 'uploaded', name: 'Nuevo.csv', kind: 'upload' };
-    else if (path === '/v2/sources/google') data = { _id: 'google-source', name: 'Hoja pública', kind: 'google', access_mode: 'public' };
+    else if (path === '/v2/sources') data = state.sources;
+    else if (path === '/v2/sources/upload') { data = { _id: 'uploaded', name: 'Nuevo.csv', kind: 'upload' }; state.sources.push(data); }
+    else if (path === '/v2/sources/google') { data = { _id: 'google-source', name: 'Hoja pública', kind: 'google', access_mode: 'public' }; state.sources.push(data); }
     else if (path === '/v2/google/status') data = { client_id: '', public_access: false };
     else if (path.endsWith('/chart')) data = { labels: ['Total'], datasets: [{ label: 'Total', data: [1500] }], filtered_rows: 2, warnings: [] };
     else if (path.endsWith('/sheets')) data = ['Datos'];
