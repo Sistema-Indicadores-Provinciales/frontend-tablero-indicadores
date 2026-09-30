@@ -18,12 +18,15 @@ export interface Preview {
 export interface ChartData {
   labels: Scalar[]; datasets: { label: string; data: (number | null)[]; x?: Scalar[] }[];
   filtered_rows: number; warnings: string[]; columns?: string[]; records?: Record<string, Scalar>[];
-  filter_options?: Record<string, { values: string[]; total: number }>;
+  filter_options?: FilterOptions;
+  ignored_filters?: string[];
 }
+export type SectionFilters = Record<string, string[]>;
+export type FilterOptions = Record<string, { values: string[]; total: number; type?: string }>;
 export interface Widget { id: string; title: string; width: number; library: 'Plotly' | 'ECharts'; config: ChartConfig; }
 export interface SectionDestination { dashboardId: string; sectionId: string; }
 export interface DestinationOption extends SectionDestination { dashboardName: string; sectionName: string; path: string; }
-export interface Workspace { _id: string; name: string; source_id: string; widgets: Widget[]; destination?: SectionDestination; }
+export interface Workspace { _id: string; name: string; source_id: string; widgets: Widget[]; destination?: SectionDestination; filter_columns?: string[]; }
 export interface WorkspaceView extends Workspace { can_edit: boolean; source_kind: Source['kind']; source_access_mode?: 'public'; }
 export interface Publication {
   published: boolean; canShare: boolean; currentUserId: string; canView?: boolean; users: { _id: string; username: string }[]; recipientIds: string[];

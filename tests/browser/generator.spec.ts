@@ -59,6 +59,7 @@ test('all chart types render in both libraries', async ({ page }) => {
 test('filters invalidate previous results and saved configuration includes layout', async ({ page }) => {
   await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
   await expect(page.locator('.js-plotly-plot')).toBeVisible();
+  await page.getByText('Limitar los datos guardados', { exact: false }).click();
   await page.getByLabel('Mes', { exact: true }).fill('2');
   await expect(page.locator('.js-plotly-plot')).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Ancho', exact: true }).selectOption('6');

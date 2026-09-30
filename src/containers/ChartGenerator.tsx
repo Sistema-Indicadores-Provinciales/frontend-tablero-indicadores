@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '@iconify/react';
 import { isAxiosError } from 'axios';
+import { Autocomplete, Button, Checkbox, TextField } from '@mui/material';
 import { AuthContext } from 'contexts/AuthContext';
 import SaveDashboardDialog from 'components/analytics/SaveDashboardDialog';
 import { analytics, errorMessage } from 'config/Analytics';
@@ -9,6 +10,7 @@ import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
 import { ChartData, ChartType, DestinationOption, Preview, Publication, ReadConfig, SectionOptions, Source, Widget, Workspace, chartNames } from 'types/Generator';
 import GeneratorChart from 'components/analytics/GeneratorChart';
+import { suggestFilterColumns } from 'utils/sectionFilters';
 import './chart-generator.css';
 
 const initialRead: ReadConfig = { sheet: '', header_row: 1, decimal: ',', types: {} };
@@ -42,6 +44,7 @@ export default function ChartGenerator() {
   const [chartErrors, setChartErrors] = useState<Record<string, string>>({});
   const [running, setRunning] = useState<Record<string, boolean>>({});
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [filterColumns, setFilterColumns] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState('');
@@ -55,6 +58,10 @@ export default function ChartGenerator() {
   const source = sources.find(s => s._id === sourceId);
   const sourceReady = !!source;
   const sourceMissing = sourcesLoaded && !!sourceId && !sourceReady;
+  const suggestedColumns = preview ? suggestFilterColumns(Object.fromEntries(preview.columns.map(column => [column, {
+    type: preview.column_meta[column].type, total: preview.column_meta[column].unique_count, values: [],
+  }]))) : [];
+  const visibleFilterColumns = (filterColumns ?? suggestedColumns).filter(column => preview?.columns.includes(column));
   const headers = googleToken ? { 'X-Google-Access-Token': googleToken } : {};
   const invalidate = () => {
     Object.values(requests.current).forEach(r => r.abort()); requests.current = {};
@@ -96,7 +103,7 @@ export default function ChartGenerator() {
     if (!dashboardId && !sectionId) {
       setTargetLoading(false);
       if (loadedEdit.current) {
-        loadedEdit.current = ''; setWorkspaceId(''); setPublication(null); setSourceId(''); setRead(initialRead); setFilters({}); setWidgets([newWidget()]); setName('Mi tablero'); invalidate();
+        loadedEdit.current = ''; setWorkspaceId(''); setPublication(null); setSourceId(''); setRead(initialRead); setFilters({}); setFilterColumns(null); setWidgets([newWidget()]); setName('Mi tablero'); invalidate();
       }
       return;
     }
@@ -143,7 +150,7 @@ export default function ChartGenerator() {
   const selectSource = (id: string) => {
     invalidate(); setPublication(null); setSourceId(id);
     if (!(workspaceId && sourceMissing)) { setRead(initialRead); setFilters({}); }
-    if (!workspaceId) setWidgets([newWidget()]);
+    if (!workspaceId) { setWidgets([newWidget()]); setFilterColumns(null); }
     setError('');
   };
   const changeRead = (patch: Partial<ReadConfig>) => { invalidate(); setRead(prev => ({ ...prev, ...patch })); setFilters({}); };
@@ -186,7 +193,7 @@ export default function ChartGenerator() {
     let contentSaved = false;
     try {
       const target = selectedDestination || destination;
-      const body = { name: savedName, source_id: sourceId, widgets: widgets.map(w => ({ ...w, config: { ...w.config, ...read, filters } })),
+      const body = { name: savedName, source_id: sourceId, filter_columns: visibleFilterColumns, widgets: widgets.map(w => ({ ...w, config: { ...w.config, ...read, filters } })),
         ...(target ? { destination: { dashboardId: target.dashboardId, sectionId: target.sectionId } } : {}) };
       const { data } = workspaceId ? await analytics.put<Workspace>(`/v2/workspaces/${workspaceId}`, body) : await analytics.post<Workspace>('/v2/workspaces', body);
       contentSaved = true; setWorkspaceId(data._id); setName(savedName);
@@ -219,7 +226,7 @@ export default function ChartGenerator() {
       invalidate(); setPublication(null); setSourceId(saved.source_id); setName(saved.name); setWorkspaceId(editId); setWidgets(saved.widgets);
       const cfg = saved.widgets[0]?.config;
       setRead(cfg ? { sheet: cfg.sheet, header_row: cfg.header_row, decimal: cfg.decimal, types: cfg.types } : initialRead);
-      setFilters(cfg?.filters || {}); setNotice('Estás editando gráficos guardados. Usá Agregar gráfico para sumar otro; al guardar se conservarán los demás.');
+      setFilters(cfg?.filters || {}); setFilterColumns(saved.filter_columns ?? null); setNotice('Estás editando gráficos guardados. Usá Agregar gráfico para sumar otro; al guardar se conservarán los demás.');
     }).catch(e => { if (!controller.signal.aborted) setTargetError(errorMessage(e)); })
       .finally(() => { if (!controller.signal.aborted) setTargetLoading(false); });
     return () => controller.abort();
@@ -269,10 +276,20 @@ export default function ChartGenerator() {
       </>}
     </section>}
     {sourceReady && preview && <>
-      <section className="generator-panel"><h2>3. Filtros</h2><p className="generator-hint">Sin selección se incluyen todos los valores. Después de cambiar filtros, generá nuevamente cada gráfico.</p><div className="generator-controls">
+      <section className="generator-panel"><h2>3. Filtros de la sección</h2>
+        <p className="generator-hint">Elegí los campos que aparecerán arriba de la sección. Por ejemplo, Año y Mes: una selección actualizará todos los gráficos que tengan esos campos, incluidos los totales.</p>
+        <Autocomplete className="filter-field-picker" multiple disableCloseOnSelect size="small" options={preview.columns} value={visibleFilterColumns}
+          getOptionDisabled={column => visibleFilterColumns.length >= 20 && !visibleFilterColumns.includes(column)}
+          onChange={(_, columns) => setFilterColumns(columns)}
+          renderOption={(props, column, { selected }) => { const { key, ...other } = props; return <li key={key} {...other}><Checkbox size="small" checked={selected} sx={{ mr: 1 }} />{column}</li>; }}
+          renderInput={params => <TextField {...params} label="Campos para filtrar la sección" placeholder="Elegir campos" helperText="Hasta 20 campos. Si no elegís ninguno, la sección se mostrará sin filtros." />} />
+        <Button size="small" onClick={() => setFilterColumns(suggestedColumns)}>Sugerir filtros</Button>
+        <Button size="small" onClick={() => setFilterColumns([])}>Quitar todos</Button>
+        <details className="generator-restrictions"><summary>Limitar los datos guardados{Object.values(filters).some(v => v.length) ? ' · Hay restricciones activas' : ' (opcional)'}</summary>
+        <p className="generator-hint">Estas restricciones definen qué datos tendrá la sección. Los filtros de arriba solo permiten explorar dentro de este conjunto. Sin selección se incluyen todos los valores.</p><div className="generator-controls">
         {preview.columns.map(c => <label key={c}>{c}<input placeholder="Valores separados por ;" value={(filters[c] || []).join(';')} onChange={e => { invalidate(); setFilters(prev => ({ ...prev, [c]: e.target.value ? e.target.value.split(';') : [] })); }} list={`values-${encodeURIComponent(c)}`} /><datalist id={`values-${encodeURIComponent(c)}`}>{preview.column_meta[c].unique_values.map((v, i) => <option key={i} value={String(v)} />)}</datalist></label>)}
         <button onClick={() => { invalidate(); setFilters({}); }}>Limpiar filtros</button>
-      </div></section>
+      </div></details></section>
       <section className="generator-controls generator-panel">
         {destination ? <strong>{destination.dashboardName} → {destination.sectionName}</strong> : <label>Nombre del tablero<input value={name} maxLength={200} onChange={e => setName(e.target.value)} /></label>}
         <button disabled={busy || targetLoading || !!targetError || !name.trim() || !widgets.length} className="generator-primary" onClick={() => { setSaveError(''); setSaveOpen(true); }}>{destination ? 'Guardar en esta sección' : 'Guardar tablero'}</button>

@@ -43,3 +43,23 @@
 .js-plotly-plot .modebar-btn svg path { fill: var(--app-text-secondary) !important; }
 .js-plotly-plot .modebar-btn:hover svg path, .js-plotly-plot .modebar-btn.active svg path { fill: var(--app-primary) !important; }
 @media(max-width: 600px) { .generator-hero { padding: 20px; } .generator-hero h1 { font-size: 24px; } .generator-hero > svg { display: none; } }
+
+.section-filter-bar { position: sticky; top: 64px; z-index: 1000; display: flex; align-items: center; gap: 12px; padding: 10px 0; margin: 18px 0; background: var(--app-background); border-bottom: 1px solid var(--app-border); min-width: 0; }
+.section-filter-controls { display: flex; gap: 12px; flex: 1; min-width: 0; overflow-x: auto; padding: 2px 1px 4px; }
+.section-filter-bar .section-filter-control { flex: 1 0 150px; min-width: 150px; max-width: 240px; height: 36px; padding: 6px 10px; justify-content: space-between; font-size: 11px; font-weight: 400; border-radius: 3px; color: var(--app-text); background: var(--app-paper); border-color: var(--app-control-border); box-shadow: var(--app-shadow); }
+.section-filter-bar .section-filter-control:hover { background: var(--app-hover); border-color: var(--app-primary); }
+.section-filter-bar .section-filter-control[data-active="true"] { border-color: var(--app-primary); color: var(--app-primary); }
+.section-filter-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.section-filter-control .MuiButton-endIcon { margin-left: 6px; }
+.section-filter-bar .section-filter-clear { flex-shrink: 0; font-size: 11px; min-height: 36px; border-radius: 3px; }
+.saved-dashboard .generator-widget { scroll-margin-top: 145px; isolation: isolate; }
+.generator .filter-field-picker { max-width: 720px; margin: 12px 0; }
+.generator .filter-field-picker label { max-width: none; }
+.generator .generator-restrictions { margin-top: 16px; }
+.generator-restrictions summary { cursor: pointer; font-size: 13px; color: var(--app-text-secondary); margin-bottom: 12px; }
+@media(max-width: 599px) {
+  .section-filter-bar { top: 56px; gap: 8px; padding: 8px 0; }
+  .section-filter-controls { gap: 8px; }
+  .section-filter-bar .section-filter-clear { max-width: 86px; line-height: 1.2; padding: 6px 8px; }
+}
+@media(max-width: 599px) and (orientation: landscape) { .section-filter-bar { top: 48px; } }
