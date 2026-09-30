@@ -22,7 +22,7 @@
 .generator-widget { margin: 0; }
 .generator-indicator { padding: 50px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
 .generator-indicator strong { font-size: 48px; color: var(--app-secondary); }
-@media(max-width: 900px) { .generator-widget { grid-column: span 12 !important; } .generator { padding: 12px; } }
+@media(max-width: 900px) { .generator-widget:not(.generator-counter) { grid-column: span 12 !important; } .generator { padding: 12px; } }
 
 .generator .generator-primary:hover:not(:disabled) { background: var(--app-primary-hover); color: var(--app-on-primary); }
 .generator-hero { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 28px; border-radius: 12px; background: var(--app-header-background); color: var(--app-on-header); }
@@ -38,6 +38,13 @@
 .generator-hero button { display: inline-flex; align-items: center; gap: 6px; }
 .saved-dashboard .generator-grid { margin-top: 24px; }
 .saved-dashboard .generator-widget h2 { border-bottom: 1px solid var(--app-border); padding-bottom: 12px; overflow-wrap: anywhere; }
+.generator-counters { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); align-items: start; gap: 16px; margin-top: 18px; }
+.saved-dashboard .generator-counter { padding: 16px 20px; min-height: 132px; }
+.saved-dashboard .generator-counter h2 { border: 0; padding: 0; margin: 0; font-size: 15px; line-height: 1.4; }
+.generator-counter .generator-indicator { padding: 8px 0 4px; text-align: left; gap: 0; }
+.generator-counter .generator-indicator strong { font-size: 40px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.generator-counter .generator-hint { margin: 4px 0 0; font-size: 12px; }
+.generator-counter .generator-loading { min-height: 56px; margin: 8px 0 0; font-size: 13px; }
 .generator-loading { min-height: 250px; display: grid; place-items: center; background: var(--app-elevated); border-radius: 8px; color: var(--app-text-secondary); }
 .generator button:focus-visible, .generator a:focus-visible { outline: 3px solid var(--app-focus); outline-offset: 3px; }
 .js-plotly-plot .modebar-btn svg path { fill: var(--app-text-secondary) !important; }

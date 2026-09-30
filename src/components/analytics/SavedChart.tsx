@@ -42,12 +42,15 @@ export default function SavedChart({ workspaceId, widget, googleToken, filters, 
     }).finally(() => { if (!controller.signal.aborted) setBusy(false); });
     return () => controller.abort();
   }, [workspaceId, widget, googleToken, filters, retry, onOptions]);
-  return <section className="generator-panel generator-widget" aria-label={widget.title} style={{ gridColumn: `span ${widget.width}` }}>
+  const isCounter = widget.config.chart_type === 'indicator';
+  const recordCount = result && <p className="generator-hint">{result.filtered_rows.toLocaleString('es-AR')} registros</p>;
+  return <section className={`generator-panel generator-widget${isCounter ? ' generator-counter' : ''}`} aria-label={widget.title} style={isCounter ? undefined : { gridColumn: `span ${widget.width}` }}>
     <h2>{widget.title}</h2>
     {busy ? <p role="status" className="generator-loading">Cargando gráfico…</p> : error ? <Alert severity="error" action={<Button onClick={() => setRetry(v => v + 1)}>Reintentar</Button>}>{error}</Alert> : result && <>
-      <p className="generator-hint">{result.filtered_rows.toLocaleString('es-AR')} registros</p>
+      {!isCounter && recordCount}
       {!!result.ignored_filters?.length && <p className="generator-hint">Este gráfico no tiene los campos: {result.ignored_filters.join(', ')}. Se aplican los demás filtros.</p>}
-      {result.filtered_rows === 0 ? <Alert severity="info">No hay datos para los filtros seleccionados.</Alert> : <GeneratorChart widget={widget} result={result} />}
+      {result.filtered_rows === 0 ? <Alert severity="info">No hay datos para los filtros seleccionados.</Alert> : <GeneratorChart widget={widget} result={result} showIndicatorTitle={!isCounter} />}
+      {isCounter && recordCount}
       {!!result.warnings.length && <details className="generator-hint"><summary>Notas sobre los datos</summary>{result.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</details>}
     </>}
   </section>;

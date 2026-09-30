@@ -4,7 +4,7 @@ import { Icon } from '@iconify/react';
 import { analytics, errorMessage } from 'config/Analytics';
 import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
-import { FilterOptions, SectionFilters, WorkspaceView } from 'types/Generator';
+import { FilterOptions, SectionFilters, Widget, WorkspaceView } from 'types/Generator';
 import SavedChart from 'components/analytics/SavedChart';
 import SectionFilterBar from 'components/analytics/SectionFilterBar';
 import { suggestFilterColumns } from 'utils/sectionFilters';
@@ -61,6 +61,10 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     run();
     return () => controller.abort();
   }, [workspaceId, refresh]);
+  const widgets = workspace?._id === workspaceId ? workspace.widgets : [];
+  const counters = widgets.filter(widget => widget.config.chart_type === 'indicator');
+  const charts = widgets.filter(widget => widget.config.chart_type !== 'indicator');
+  const renderWidget = (widget: Widget) => <SavedChart key={`${workspaceId}:${widget.id}`} workspaceId={workspaceId} widget={widget} googleToken={googleToken} filters={activeFilters} onOptions={onOptions} />;
   return <main className="generator saved-dashboard">
     {dashboardPath && <Link className="generator-link-button" to={dashboardPath}>← Volver a {dashboardName}</Link>}
     <header className="generator-hero">
@@ -74,6 +78,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
       ? <p className="generator-hint">Google Sheets · Enlace público. No hace falta conectar una cuenta para actualizar estos gráficos.</p>
       : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={() => setRefresh(v => v + 1)} busy={busy} />)}
     {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={options} values={activeFilters} onChange={setFilters} />}
-    <div className="generator-grid">{workspace?._id === workspaceId && workspace.widgets.map(w => <SavedChart key={`${workspaceId}:${w.id}`} workspaceId={workspaceId} widget={w} googleToken={googleToken} filters={activeFilters} onOptions={onOptions} />)}</div>
+    {counters.length > 0 && <section className="generator-counters" aria-label="Contadores de la sección">{counters.map(renderWidget)}</section>}
+    {charts.length > 0 && <div className="generator-grid">{charts.map(renderWidget)}</div>}
   </main>;
 }

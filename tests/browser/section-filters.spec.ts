@@ -1,8 +1,12 @@
 import { test, expect, Page } from '@playwright/test';
 
 const config = { sheet: 'Datos', header_row: 1, decimal: ',', types: {}, chart_type: 'indicator', aggregation: 'sum', x_col: 'Total', y_col: 'Total', group_col: '', date_bucket: 'none', filters: {} };
-const widgets = ['Total intervenciones', 'Por mes', 'Por tipo', 'Otra hoja'].map((title, index) => ({ id: String(index), title, width: 6, library: 'Plotly',
+const counters = ['Total intervenciones', 'Por mes', 'Por tipo', 'Otra hoja'].map((title, index) => ({ id: String(index), title, width: 6, library: 'Plotly',
   config: { ...config, x_col: ['Total', 'Mes', 'Año', 'Tipo'][index] } }));
+const widgets = [
+  { id: '4', title: 'Evolución mensual', width: 12, library: 'ECharts', config: { ...config, chart_type: 'bar', x_col: 'Mes' } },
+  ...counters,
+];
 const columns = ['Año', 'Mes', 'Tipo', 'Total'];
 const options = { Año: { values: ['2025', '2026'], total: 2, type: 'number' }, Mes: { values: ['Marzo', 'Enero', 'Febrero'], total: 3, type: 'text' }, Tipo: { values: ['Grupal', 'Individual'], total: 2, type: 'text' }, Total: { values: ['1', '10', '30'], total: 3, type: 'number' } };
 
@@ -52,6 +56,16 @@ test('one compact bar filters all compatible charts immediately and stays below 
   await page.goto('/educacion/intervenciones');
   const bar = page.getByRole('region', { name: 'Filtros de la sección', exact: true });
   await expect(page.locator('.generator-indicator strong')).toHaveText(['100', '100', '100', '7'], { timeout: 60000 });
+  const counters = page.getByRole('region', { name: 'Contadores de la sección' });
+  const graph = page.getByRole('region', { name: 'Evolución mensual' });
+  await expect(graph.locator('canvas')).toBeVisible({ timeout: 60000 });
+  await expect(counters.getByRole('heading')).toHaveText(['Total intervenciones', 'Por mes', 'Por tipo', 'Otra hoja']);
+  await expect(counters.getByText('Total intervenciones', { exact: true })).toHaveCount(1);
+  const counterBounds = (await counters.boundingBox())!, filterBounds = (await bar.boundingBox())!;
+  expect(counterBounds.y).toBeGreaterThanOrEqual(filterBounds.y + filterBounds.height);
+  expect(counterBounds.height).toBeLessThan(180);
+  expect((await graph.boundingBox())!.y).toBeGreaterThanOrEqual(counterBounds.y + counterBounds.height);
+  await page.screenshot({ path: 'test-results/compact-counters-desktop.png', fullPage: true });
   await expect(bar).toHaveCount(1);
   await expect(page.getByText('Filtrar este gráfico', { exact: true })).toHaveCount(0);
   await expect(bar.getByRole('button', { name: 'Filtrar por Total', exact: true })).toHaveCount(0);
@@ -76,6 +90,12 @@ test('one compact bar filters all compatible charts immediately and stays below 
   await bar.getByRole('button', { name: 'Limpiar filtros' }).click();
   await expect(page.locator('.generator-indicator strong')).toHaveText(['100', '100', '100', '7']);
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const first = (await counters.locator('.generator-counter').nth(0).boundingBox())!;
+  const second = (await counters.locator('.generator-counter').nth(1).boundingBox())!;
+  expect(first.height).toBeLessThan(180);
+  expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
+  await page.screenshot({ path: 'test-results/compact-counters-mobile.png', fullPage: true });
   await page.evaluate(() => window.scrollTo(0, 700));
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await expect.poll(async () => (await bar.boundingBox())?.y).toBeGreaterThanOrEqual(56);
@@ -164,6 +184,8 @@ test('search, multiple selections and Solamente work in dark mode and the popup 
   const bar = page.getByRole('region', { name: 'Filtros de la sección' });
   await page.getByRole('button', { name: 'Activar modo oscuro' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(page.getByRole('region', { name: 'Evolución mensual' }).locator('canvas')).toBeVisible();
+  await page.screenshot({ path: 'test-results/compact-counters-dark.png', fullPage: true });
   await bar.getByRole('button', { name: 'Filtrar por Mes' }).click();
   const popup = page.getByRole('dialog', { name: 'Filtrar por Mes' });
   await popup.getByRole('checkbox', { name: 'Enero', exact: true }).check();

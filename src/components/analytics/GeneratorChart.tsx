@@ -1,18 +1,34 @@
-import { lazy, Suspense } from 'react';
+import { ComponentProps, lazy, Suspense, useCallback, useEffect, useRef } from 'react';
+import type EChartsReact from 'echarts-for-react';
 import { ChartData, Widget } from 'types/Generator';
 import { useChartTheme } from 'utils/charts/chartTheme';
 const Plot = lazy(() => import('react-plotly.js'));
 const ECharts = lazy(() => import('echarts-for-react'));
+function ResponsiveECharts(props: ComponentProps<typeof ECharts>) {
+  const container = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<EChartsReact>(null);
+  const resize = useCallback(() => {
+    const chart = chartRef.current?.getEchartsInstance();
+    if (chart && !chart.isDisposed()) chart.resize({ width: 'auto', height: 'auto' });
+  }, []);
+  useEffect(() => {
+    // Observe every size change, including one during the initial chart animation.
+    const observer = new ResizeObserver(resize);
+    if (container.current) observer.observe(container.current);
+    return () => observer.disconnect();
+  }, [resize]);
+  return <div ref={container} style={{ width: '100%', minWidth: 0 }}><ECharts {...props} ref={chartRef} autoResize={false} onChartReady={resize} /></div>;
+}
 const quantile = (a: number[], p: number) => {
   const index = (a.length - 1) * p, low = Math.floor(index);
   return a[low] + (a[Math.ceil(index)] - a[low]) * (index - low);
 };
-export default function GeneratorChart({ widget, result }: { widget: Widget; result: ChartData }) {
+export default function GeneratorChart({ widget, result, showIndicatorTitle = true }: { widget: Widget; result: ChartData; showIndicatorTitle?: boolean }) {
   const chartTheme = useChartTheme();
   const kind = widget.config.chart_type;
   if (kind === 'table') return <div className="generator-table"><table><thead><tr>{result.columns?.map(c => <th key={c}>{c}</th>)}</tr></thead><tbody>{result.records?.map((row, i) => <tr key={i}>{result.columns?.map(c => <td key={c}>{String(row[c] ?? '—')}</td>)}</tr>)}</tbody></table></div>;
   if (!result.datasets.length) return <p>No hay datos para los filtros seleccionados.</p>;
-  if (kind === 'indicator') return <div className="generator-indicator"><strong>{result.datasets[0].data[0]?.toLocaleString('es-AR') ?? 'Sin datos'}</strong><span>{widget.title}</span></div>;
+  if (kind === 'indicator') return <div className="generator-indicator"><strong>{result.datasets[0].data[0]?.toLocaleString('es-AR') ?? 'Sin datos'}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
   let labels = result.labels.map(v => v == null ? 'Sin dato' : v);
   let datasets = result.datasets;
   let renderKind: string = kind;
@@ -64,7 +80,7 @@ export default function GeneratorChart({ widget, result }: { widget: Widget; res
       yAxis = { ...axisStyle, type: 'category', data: datasets.map(s => s.label) };
       series = [{ type: 'heatmap', data: datasets.flatMap((s, row) => s.data.flatMap((v, col) => v == null ? [] : [[col, row, v]])) }];
     }
-    return <Suspense fallback={<p>Cargando gráfico…</p>}><ECharts style={{ height: 450 }} replaceMerge={['series', 'xAxis', 'yAxis', 'visualMap']} option={{
+    return <Suspense fallback={<p>Cargando gráfico…</p>}><ResponsiveECharts style={{ height: 450 }} replaceMerge={['series', 'xAxis', 'yAxis', 'visualMap']} option={{
       color: chartTheme.colors,
       backgroundColor: chartTheme.paper,
       textStyle: { color: chartTheme.text, fontFamily: chartTheme.fontFamily },
