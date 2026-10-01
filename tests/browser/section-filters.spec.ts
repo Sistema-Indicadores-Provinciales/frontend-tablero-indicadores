@@ -15,9 +15,15 @@ async function only(page: Page, column: string, value: string) {
   await page.getByRole('dialog', { name: `Filtrar por ${column}`, exact: true }).getByRole('button', { name: `Solamente ${value}`, exact: true }).click();
 }
 
-async function setup(page: Page, legacy = false) {
+async function setup(page: Page, legacy = false, contextual = false) {
   const state = { denied: false, requests: [] as { id: string; filters: Record<string, string[]> }[], saves: [] as any[],
-    workspace: { _id: 'saved', name: 'Intervenciones', source_id: 'file', widgets, ...(legacy ? {} : { filter_columns: ['Año', 'Mes'] }) } };
+    rows: [
+      { Año: '2026', Mes: 'Enero', Tipo: 'Individual', Total: 10 },
+      { Año: '2026', Mes: 'Febrero', Tipo: 'Grupal', Total: 20 },
+      { Año: '2026', Mes: 'Febrero', Tipo: 'Individual', Total: 5 },
+      { Año: '2025', Mes: 'Marzo', Tipo: 'Grupal', Total: 30 },
+    ] as Record<string, string | number>[],
+    workspace: { _id: 'saved', name: 'Intervenciones', source_id: 'file', widgets, ...(legacy ? {} : { filter_columns: contextual ? ['Año', 'Mes', 'Tipo'] : ['Año', 'Mes'] }) } };
   const board = { _id: 'board', keyname: 'educacion', name: 'Educación', show: true, sections: [{ _id: 'section', keyname: 'intervenciones', name: 'Intervenciones', show: true, workspaceId: 'saved' }] };
   await page.addInitScript(() => localStorage.setItem('user', JSON.stringify({ _id: 'owner', username: 'Ana', profileType: 'ADMIN', access_token: 'test' })));
   await page.route(/:(3000|8000)\//, async route => {
@@ -42,6 +48,16 @@ async function setup(page: Page, legacy = false) {
       const filters = req.method() === 'POST' ? req.postDataJSON().filters : {};
       state.requests.push({ id, filters });
       if (state.denied) { status = 404; data = { detail: 'No tenés acceso a esta sección.' }; }
+      else if (contextual) {
+        const matches = (row: Record<string, string | number>, except?: string) => Object.entries(filters as Record<string, string[]>).every(([column, values]) => column === except || !values.length || values.includes(String(row[column])));
+        const rows = state.rows.filter(row => matches(row));
+        data = { labels: ['Total'], datasets: [{ label: 'Total', data: [id === '3' ? 7 : rows.reduce((sum, row) => sum + Number(row.Total), 0)] }], filtered_rows: id === '3' ? 1 : rows.length, warnings: [],
+          filter_options: id === '3' ? { Tipo: { values: ['Grupal'], total: 1 } } : Object.fromEntries((state.workspace.filter_columns || []).map(column => {
+            const values = [...new Set(state.rows.filter(row => matches(row, column)).map(row => String(row[column])))];
+            return [column, { values: values.slice(0, 100), total: values.length, type: options[column as keyof typeof options].type,
+              unfiltered_total: new Set(state.rows.map(row => row[column])).size, available_selected: (filters[column] || []).filter((value: string) => values.includes(value)) }];
+          })), ignored_filters: id === '3' ? Object.keys(filters).filter(column => column !== 'Tipo') : [] };
+      }
       else data = { labels: ['Total'], datasets: [{ label: 'Total', data: [id === '3' ? 7 : filters.Mes?.length ? 10 : filters.Año?.length ? 30 : 100] }], filtered_rows: 3, warnings: [],
         filter_options: Object.fromEntries(Object.entries(options).filter(([key]) => id !== '3' && (state.workspace.filter_columns?.includes(key) ?? true))),
         ignored_filters: id === '3' ? Object.keys(filters) : [] };
@@ -102,6 +118,106 @@ test('one compact bar filters all compatible charts immediately and stays below 
   await expect.poll(async () => (await bar.boundingBox())?.y).toBeLessThan(62);
   await expect.poll(async () => (await bar.boundingBox())?.height).toBeLessThan(145);
   await page.screenshot({ path: 'test-results/section-filters-mobile.png' });
+  expect(state.saves).toEqual([]);
+});
+
+test('cascading choices hide Grupal in January, retain multi-select alternatives and restore on clear', async ({ page }) => {
+  const state = await setup(page, false, true);
+  await page.goto('/educacion/intervenciones');
+  await only(page, 'Año', '2026');
+  await only(page, 'Mes', 'Enero');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['10', '10', '10', '7']);
+  await page.getByRole('button', { name: 'Activar modo oscuro' }).click();
+  await page.getByRole('button', { name: 'Filtrar por Tipo', exact: true }).click();
+  const popup = page.getByRole('dialog', { name: 'Filtrar por Tipo', exact: true });
+  // The other sheet (chart 3) has Grupal but cannot filter by Mes; it must not
+  // reintroduce this option when compatible charts have no January group rows.
+  await expect(popup.getByRole('checkbox', { name: 'Individual', exact: true })).toBeVisible();
+  await expect(popup.getByRole('checkbox', { name: 'Grupal', exact: true })).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/cascading-january-dark.png', fullPage: true });
+  const search = popup.getByRole('textbox', { name: 'Buscar en Tipo' });
+  await search.fill('Grupal');
+  await search.press('Enter');
+  await expect(popup.getByText('Sin coincidencias')).toBeVisible();
+  await expect(popup.getByRole('button', { name: /Usar/ })).toHaveCount(0);
+  expect(state.requests.at(-1)?.filters.Tipo).toBeUndefined();
+  await search.press('Escape');
+  await page.getByRole('button', { name: 'Filtrar por Mes', exact: true }).click();
+  const months = page.getByRole('dialog', { name: 'Filtrar por Mes', exact: true });
+  await months.getByRole('checkbox', { name: 'Febrero', exact: true }).check();
+  await months.getByRole('textbox').press('Escape');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['35', '35', '35', '7']);
+  await page.getByRole('button', { name: 'Filtrar por Tipo', exact: true }).click();
+  await popup.getByRole('checkbox', { name: 'Individual', exact: true }).check();
+  await expect(popup.getByRole('checkbox', { name: 'Grupal', exact: true })).toBeVisible();
+  await popup.getByRole('textbox').press('Escape');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['15', '15', '15', '7']);
+  await page.getByRole('button', { name: 'Limpiar filtros' }).click();
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['65', '65', '65', '7']);
+  await only(page, 'Tipo', 'Grupal');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['50', '50', '50', '7']);
+  expect(state.saves).toEqual([]);
+});
+
+test('selected values removed from the source stay removable and are never silently cleared', async ({ page }) => {
+  const state = await setup(page, false, true);
+  await page.goto('/educacion/intervenciones');
+  await only(page, 'Mes', 'Febrero');
+  await only(page, 'Tipo', 'Grupal');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['20', '20', '20', '7']);
+  state.rows = state.rows.filter(row => row.Tipo !== 'Grupal');
+  await page.getByRole('button', { name: 'Actualizar datos', exact: true }).click();
+  await expect(page.getByText('No hay datos para los filtros seleccionados.')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Filtrar por Tipo', exact: true }).click();
+  const popup = page.getByRole('dialog', { name: 'Filtrar por Tipo' });
+  await expect(popup.getByText('Sin datos con los otros filtros')).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Solamente Grupal' })).toHaveCount(0);
+  await popup.getByRole('button', { name: 'Quitar Grupal' }).click();
+  await expect(popup.getByText('Grupal', { exact: true })).toHaveCount(0);
+  await popup.getByRole('textbox').press('Escape');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['5', '5', '5', '7']);
+  expect(state.requests.filter(req => req.id === '0').at(-1)?.filters).toEqual({ Mes: ['Febrero'] });
+  expect(state.saves).toEqual([]);
+});
+
+test('cascading options wait for current chart responses and never mix with stale choices', async ({ page }) => {
+  await setup(page, false, true);
+  let started = false, release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/v2/workspaces/saved/widgets/0/chart', async route => {
+    if (route.request().method() !== 'POST' || !route.request().postDataJSON().filters.Mes?.includes('Enero')) return route.fallback();
+    started = true;
+    await pending;
+    await route.fulfill({ json: { labels: ['Total'], datasets: [{ label: 'Total', data: [9999] }], filtered_rows: 1, warnings: [],
+      filter_options: { Tipo: { values: ['Obsoleto'], total: 1 } } } });
+  });
+  await page.goto('/educacion/intervenciones');
+  await only(page, 'Mes', 'Enero');
+  await expect.poll(() => started).toBe(true);
+  await expect(page.getByRole('button', { name: 'Filtrar por Tipo', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Limpiar filtros' }).click();
+  await only(page, 'Mes', 'Febrero');
+  release();
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['25', '25', '25', '7']);
+  await page.getByRole('button', { name: 'Filtrar por Tipo', exact: true }).click();
+  const popup = page.getByRole('dialog', { name: 'Filtrar por Tipo' });
+  await expect(popup.getByRole('listitem').getByRole('paragraph')).toHaveText(['Grupal', 'Individual']);
+});
+
+test('values beyond the suggestion limit remain valid selections after server validation', async ({ page }) => {
+  const state = await setup(page, false, true);
+  state.rows = Array.from({ length: 120 }, (_, index) => ({ Año: '2026', Mes: 'Enero', Tipo: `Tipo ${index}`, Total: 1 }));
+  await page.goto('/educacion/intervenciones');
+  await only(page, 'Mes', 'Enero');
+  await page.getByRole('button', { name: 'Filtrar por Tipo', exact: true }).click();
+  const popup = page.getByRole('dialog', { name: 'Filtrar por Tipo' });
+  await popup.getByRole('textbox').fill('Tipo 119');
+  await popup.getByRole('textbox').press('Enter');
+  await expect(popup.getByRole('checkbox', { name: 'Tipo 119', exact: true })).toBeChecked();
+  await expect(popup.getByRole('button', { name: 'Solamente Tipo 119', exact: true })).toBeEnabled();
+  await expect(popup.getByText('Sin datos con los otros filtros')).toHaveCount(0);
+  await popup.getByRole('textbox').press('Escape');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['1', '1', '1', '7']);
   expect(state.saves).toEqual([]);
 });
 

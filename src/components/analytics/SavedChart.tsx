@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button } from '@mui/material';
 import { isAxiosError } from 'axios';
 import { analytics, errorMessage } from 'config/Analytics';
-import { ChartData, FilterOptions, SectionFilters, Widget } from 'types/Generator';
+import { ChartData, ChartFilterOptions, SectionFilters, Widget } from 'types/Generator';
 import GeneratorChart from './GeneratorChart';
 
 // Keep large sections from opening dozens of simultaneous spreadsheet downloads.
@@ -17,7 +17,7 @@ async function limited<T>(run: () => Promise<T>, signal: AbortSignal): Promise<T
 
 export default function SavedChart({ workspaceId, widget, googleToken, filters, onOptions }: {
   workspaceId: string; widget: Widget; googleToken: string; filters: SectionFilters;
-  onOptions: (id: string, options: FilterOptions | null, deniedMessage?: string) => void;
+  onOptions: (response: ChartFilterOptions, deniedMessage?: string) => void;
 }) {
   const [result, setResult] = useState<ChartData | null>(null);
   const [busy, setBusy] = useState(true), [error, setError] = useState('');
@@ -25,19 +25,23 @@ export default function SavedChart({ workspaceId, widget, googleToken, filters, 
   useEffect(() => {
     const controller = new AbortController();
     setBusy(true); setError(''); setResult(null);
+    onOptions({ widget, filters });
     limited(async () => {
       const url = `/v2/workspaces/${encodeURIComponent(workspaceId)}/widgets/${encodeURIComponent(widget.id)}/chart`;
       const config = { signal: controller.signal, headers: googleToken ? { 'X-Google-Access-Token': googleToken } : {} };
       const response = Object.values(filters).some(values => values.length)
         ? await analytics.post<ChartData>(url, { filters }, config)
         : await analytics.get<ChartData>(url, config);
-      if (!controller.signal.aborted) { setResult(response.data); onOptions(widget.id, response.data.filter_options || {}); }
+      if (!controller.signal.aborted) {
+        setResult(response.data);
+        onOptions({ widget, filters, options: response.data.filter_options || {}, ignoredFilters: response.data.ignored_filters });
+      }
     }, controller.signal).catch(e => {
       if (!controller.signal.aborted) {
         setError(errorMessage(e));
         // Do not leave previously accessible values on screen after permission is revoked.
         const denied = isAxiosError(e) && [401, 403, 404].includes(e.response?.status || 0);
-        onOptions(widget.id, null, denied ? errorMessage(e) : undefined);
+        onOptions({ widget, filters, options: null }, denied ? errorMessage(e) : undefined);
       }
     }).finally(() => { if (!controller.signal.aborted) setBusy(false); });
     return () => controller.abort();

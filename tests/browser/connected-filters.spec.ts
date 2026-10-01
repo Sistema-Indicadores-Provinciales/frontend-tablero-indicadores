@@ -5,7 +5,7 @@ const widget = { id: 'chart', title: 'Total de ingresos', width: 12, library: 'P
   sheet: 'Datos', header_row: 1, decimal: ',', types: {}, chart_type: 'indicator', aggregation: 'sum', x_col: 'Mes', y_col: 'Valor', group_col: '', date_bucket: 'none', filters: {},
 } };
 async function setup(page: Page, privateSheet = true) {
-  const state = { connected: new Set<string>(), expired: false, connectCount: 0, chartFailure: false, savedChanges: 0, requests: [] as any[], secret: '', persistent: true };
+  const state = { connected: new Set<string>(), expired: false, connectCount: 0, chartFailure: false, noRows: false, savedChanges: 0, requests: [] as any[], secret: '', persistent: true };
   const board = { _id: 'board', keyname: 'ingresos', name: 'Ingresos', show: true, sections: [{ _id: 'section', keyname: 'graficos', name: 'Gráficos', show: true, workspaceId: 'saved' }] };
   const profile = (id: string) => ({ _id: id, username: id, profileType: id === 'admin' ? 'ADMIN' : 'INVITADO', access_token: id });
   await page.addInitScript(() => {
@@ -39,7 +39,7 @@ async function setup(page: Page, privateSheet = true) {
       if (privateSheet && (!state.connected.has(user) || state.expired)) { status = 409; data = { detail: 'Google requiere una nueva autorización. Volvé a conectar tu cuenta.' }; }
       else if (state.chartFailure) { status = 503; data = { detail: 'No se pudieron consultar los datos.' }; }
       else {
-        const selected = filters.Mes || [], noRows = selected.includes('Inexistente');
+        const selected = filters.Mes || [], noRows = state.noRows;
         data = { labels: ['Total'], datasets: noRows ? [] : [{ label: 'Total', data: [selected.includes('Enero') ? 500 : 1500] }], filtered_rows: noRows ? 0 : selected.length ? 1 : 2,
           warnings: [], filter_options: { Mes: { values: ['Enero', 'Febrero'], total: 2 }, Valor: { values: ['500', '1000'], total: 2 } } };
       }
@@ -107,9 +107,14 @@ test('viewers filter and clear without editing, keep filters when refreshing and
   await panel.getByRole('button', { name: 'Filtrar por Mes', exact: true }).click();
   await page.getByRole('textbox', { name: 'Buscar en Mes' }).fill('Inexistente');
   await page.getByRole('textbox', { name: 'Buscar en Mes' }).press('Enter');
+  await expect(page.getByText('Sin coincidencias')).toBeVisible();
   await page.getByRole('textbox', { name: 'Buscar en Mes' }).press('Escape');
+  expect(state.requests.at(-1).filters).toEqual({});
+  state.noRows = true;
+  await page.getByRole('button', { name: 'Actualizar datos', exact: true }).click();
   await expect(page.getByText('No hay datos para los filtros seleccionados.')).toBeVisible();
-  await panel.getByRole('button', { name: 'Limpiar filtros' }).click();
+  state.noRows = false;
+  await page.getByRole('button', { name: 'Actualizar datos', exact: true }).click();
   await expect(page.locator('.generator-indicator strong')).toHaveText('1.500');
   state.chartFailure = true;
   await page.getByRole('button', { name: 'Actualizar datos', exact: true }).click();

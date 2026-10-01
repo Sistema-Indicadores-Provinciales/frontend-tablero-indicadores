@@ -22,7 +22,10 @@ export interface ChartData {
   ignored_filters?: string[];
 }
 export type SectionFilters = Record<string, string[]>;
-export type FilterOptions = Record<string, { values: string[]; total: number; type?: string }>;
+export type FilterOptions = Record<string, { values: string[]; total: number; type?: string; unfiltered_total?: number; available_selected?: string[] }>;
+export type ChartFilterOptions = {
+  widget: Widget; filters: SectionFilters; options?: FilterOptions | null; ignoredFilters?: string[];
+};
 export interface Widget { id: string; title: string; width: number; library: 'Plotly' | 'ECharts'; config: ChartConfig; }
 export interface SectionDestination { dashboardId: string; sectionId: string; }
 export interface DestinationOption extends SectionDestination { dashboardName: string; sectionName: string; path: string; }

@@ -4,7 +4,7 @@ import { Icon } from '@iconify/react';
 import { analytics, errorMessage } from 'config/Analytics';
 import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
-import { FilterOptions, SectionFilters, Widget, WorkspaceView } from 'types/Generator';
+import { ChartFilterOptions, FilterOptions, SectionFilters, Widget, WorkspaceView } from 'types/Generator';
 import SavedChart from 'components/analytics/SavedChart';
 import SectionFilterBar from 'components/analytics/SectionFilterBar';
 import { suggestFilterColumns } from 'utils/sectionFilters';
@@ -20,32 +20,60 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [googleToken, setGoogleToken] = useState('');
-  const [optionsByChart, setOptionsByChart] = useState<Record<string, FilterOptions>>({});
+  const [optionsByChart, setOptionsByChart] = useState<Record<string, ChartFilterOptions>>({});
+  const [catalogByChart, setCatalogByChart] = useState<Record<string, FilterOptions>>({});
   const [filters, setFilters] = useState<SectionFilters>({});
-  const onOptions = useCallback((id: string, options: FilterOptions | null, deniedMessage?: string) => {
-    if (deniedMessage) { setWorkspace(null); setOptionsByChart({}); setFilters({}); setError(deniedMessage); return; }
-    setOptionsByChart(previous => {
-      const next = { ...previous };
-      if (options) next[id] = options; else delete next[id];
-      return next;
-    });
+  const onOptions = useCallback((response: ChartFilterOptions, deniedMessage?: string) => {
+    if (deniedMessage) { setWorkspace(null); setOptionsByChart({}); setCatalogByChart({}); setFilters({}); setError(deniedMessage); return; }
+    setOptionsByChart(previous => ({ ...previous, [response.widget.id]: response }));
+    // Retain field metadata (not stale values) so legacy controls do not disappear
+    // while a request is pending or when another filter narrows their cardinality.
+    if (response.options) setCatalogByChart(previous => ({ ...previous, [response.widget.id]: Object.fromEntries(
+      Object.entries(response.options!).map(([column, option]) => [column, { values: [], type: option.type, total: option.unfiltered_total ?? option.total }]),
+    ) }));
   }, []);
-  const options = useMemo(() => {
+  const catalog = useMemo(() => {
     const merged: FilterOptions = {};
     for (const widget of workspace?.widgets || []) {
-      for (const [column, option] of Object.entries(optionsByChart[widget.id] || {})) {
-        const values = [...new Set([...(merged[column]?.values || []), ...option.values])];
-        merged[column] = { values: values.slice(0, 100), total: Math.max(values.length, merged[column]?.total || 0, option.total), type: option.type };
+      for (const [column, option] of Object.entries(catalogByChart[widget.id] || {})) {
+        merged[column] = { ...option, total: Math.max(merged[column]?.total || 0, option.total) };
       }
     }
     return merged;
-  }, [optionsByChart, workspace]);
+  }, [catalogByChart, workspace]);
   const legacyColumns = new Set(workspace?.widgets.flatMap(({ config }) => [config.x_col, config.y_col, config.group_col, ...Object.keys(config.filters || {})]));
-  const legacyOptions = Object.fromEntries(Object.entries(options).filter(([column]) => legacyColumns.has(column)));
+  const legacyOptions = Object.fromEntries(Object.entries(catalog).filter(([column]) => legacyColumns.has(column)));
   // Keep active controls visible even if a temporary source error clears their suggestions.
   const columns = workspace?.filter_columns ?? [...new Set([...suggestFilterColumns(legacyOptions), ...Object.keys(filters).filter(c => filters[c].length)])];
   const signature = JSON.stringify(Object.fromEntries(Object.entries(filters).filter(([column, values]) => columns.includes(column) && values.length)));
   const activeFilters = useMemo<SectionFilters>(() => JSON.parse(signature), [signature]);
+  const loadingOptions = !!workspace?.widgets.some(widget => {
+    const entry = optionsByChart[widget.id];
+    return entry?.widget !== widget || entry.filters !== activeFilters || entry.options === undefined;
+  });
+  const options = useMemo(() => {
+    const merged: FilterOptions = {}, ranks: Record<string, number> = {};
+    // Publish one coherent set of choices, never a mixture of old/new chart responses.
+    if (loadingOptions) return merged;
+    for (const widget of workspace?.widgets || []) {
+      const entry = optionsByChart[widget.id];
+      if (entry?.widget !== widget || entry.filters !== activeFilters) continue;
+      const rank = entry.ignoredFilters?.length || 0;
+      for (const [column, option] of Object.entries(entry.options || {})) {
+        // A sheet missing e.g. Mes must not reintroduce choices discarded by sheets
+        // which can apply it. Prefer the most compatible charts for each field.
+        if (ranks[column] !== undefined && rank > ranks[column]) continue;
+        if (ranks[column] !== rank) delete merged[column];
+        ranks[column] = rank;
+        const previous = merged[column];
+        const values = [...new Set([...(previous?.values || []), ...option.values])];
+        const available = option.available_selected ?? (activeFilters[column] || []).filter(value => option.values.includes(value) || option.total > option.values.length);
+        merged[column] = { values: values.slice(0, 100), total: Math.max(values.length, previous?.total || 0, option.total), type: option.type,
+          available_selected: [...new Set([...(previous?.available_selected || []), ...available])] };
+      }
+    }
+    return merged;
+  }, [optionsByChart, workspace, activeFilters, loadingOptions]);
   useEffect(() => { changeNavTitle(title); }, [title]);
   useEffect(() => {
     const controller = new AbortController();
@@ -77,7 +105,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     {workspace?.source_kind === 'google' && (workspace.source_access_mode === 'public'
       ? <p className="generator-hint">Google Sheets · Enlace público. No hace falta conectar una cuenta para actualizar estos gráficos.</p>
       : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={() => setRefresh(v => v + 1)} busy={busy} />)}
-    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={options} values={activeFilters} onChange={setFilters} />}
+    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={options} values={activeFilters} loading={loadingOptions} onChange={setFilters} />}
     {counters.length > 0 && <section className="generator-counters" aria-label="Contadores de la sección">{counters.map(renderWidget)}</section>}
     {charts.length > 0 && <div className="generator-grid">{charts.map(renderWidget)}</div>}
   </main>;
