@@ -21,7 +21,8 @@ export interface ChartData {
   filter_options?: FilterOptions;
   ignored_filters?: string[];
 }
-export type SectionFilters = Record<string, string[]>;
+export type SectionFilterSelection = { mode: 'include' | 'exclude'; values: string[] };
+export type SectionFilters = Record<string, SectionFilterSelection>;
 export type FilterOptions = Record<string, { values: string[]; total: number; type?: string; unfiltered_total?: number; available_selected?: string[] }>;
 export type ChartFilterOptions = {
   widget: Widget; filters: SectionFilters; options?: FilterOptions | null; ignoredFilters?: string[];

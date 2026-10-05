@@ -29,8 +29,12 @@ export default function SavedChart({ workspaceId, widget, googleToken, filters, 
     limited(async () => {
       const url = `/v2/workspaces/${encodeURIComponent(workspaceId)}/widgets/${encodeURIComponent(widget.id)}/chart`;
       const config = { signal: controller.signal, headers: googleToken ? { 'X-Google-Access-Token': googleToken } : {} };
-      const response = Object.values(filters).some(values => values.length)
-        ? await analytics.post<ChartData>(url, { filters }, config)
+      const activeFilters = Object.fromEntries(Object.entries(filters).map(([column, selection]) => [
+        column,
+        selection.mode === 'exclude' ? { exclude: selection.values } : selection.values,
+      ]));
+      const response = Object.keys(activeFilters).length
+        ? await analytics.post<ChartData>(url, { filters: activeFilters }, config)
         : await analytics.get<ChartData>(url, config);
       if (!controller.signal.aborted) {
         setResult(response.data);

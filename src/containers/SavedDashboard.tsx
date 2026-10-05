@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@iconify/react';
 import { analytics, errorMessage } from 'config/Analytics';
@@ -23,6 +23,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
   const [optionsByChart, setOptionsByChart] = useState<Record<string, ChartFilterOptions>>({});
   const [catalogByChart, setCatalogByChart] = useState<Record<string, FilterOptions>>({});
   const [filters, setFilters] = useState<SectionFilters>({});
+  const previousOptions = useRef<FilterOptions>({});
   const onOptions = useCallback((response: ChartFilterOptions, deniedMessage?: string) => {
     if (deniedMessage) { setWorkspace(null); setOptionsByChart({}); setCatalogByChart({}); setFilters({}); setError(deniedMessage); return; }
     setOptionsByChart(previous => ({ ...previous, [response.widget.id]: response }));
@@ -44,8 +45,8 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
   const legacyColumns = new Set(workspace?.widgets.flatMap(({ config }) => [config.x_col, config.y_col, config.group_col, ...Object.keys(config.filters || {})]));
   const legacyOptions = Object.fromEntries(Object.entries(catalog).filter(([column]) => legacyColumns.has(column)));
   // Keep active controls visible even if a temporary source error clears their suggestions.
-  const columns = workspace?.filter_columns ?? [...new Set([...suggestFilterColumns(legacyOptions), ...Object.keys(filters).filter(c => filters[c].length)])];
-  const signature = JSON.stringify(Object.fromEntries(Object.entries(filters).filter(([column, values]) => columns.includes(column) && values.length)));
+  const columns = workspace?.filter_columns ?? [...new Set([...suggestFilterColumns(legacyOptions), ...Object.keys(filters).filter(c => filters[c].values.length)])];
+  const signature = JSON.stringify(Object.fromEntries(Object.entries(filters).filter(([column, selection]) => columns.includes(column) && selection.values.length)));
   const activeFilters = useMemo<SectionFilters>(() => JSON.parse(signature), [signature]);
   const loadingOptions = !!workspace?.widgets.some(widget => {
     const entry = optionsByChart[widget.id];
@@ -67,13 +68,36 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
         ranks[column] = rank;
         const previous = merged[column];
         const values = [...new Set([...(previous?.values || []), ...option.values])];
-        const available = option.available_selected ?? (activeFilters[column] || []).filter(value => option.values.includes(value) || option.total > option.values.length);
+        const selected = activeFilters[column]?.values || [];
+        const available = option.available_selected ?? selected.filter(value => option.values.includes(value) || option.total > option.values.length);
         merged[column] = { values: values.slice(0, 100), total: Math.max(values.length, previous?.total || 0, option.total), type: option.type,
           available_selected: [...new Set([...(previous?.available_selected || []), ...available])] };
       }
     }
     return merged;
   }, [optionsByChart, workspace, activeFilters, loadingOptions]);
+  useEffect(() => {
+    if (loadingOptions) return;
+    const previous = previousOptions.current;
+    setFilters(current => {
+      const next = { ...current };
+      let changed = false;
+      for (const [column, option] of Object.entries(options)) {
+        const selection = current[column];
+        if (selection?.mode !== 'include') continue;
+        const known = new Set(previous[column]?.values || []);
+        const selected = new Set(selection.values);
+        const newlyAvailable = option.values.filter(value => !known.has(value) && !selected.has(value));
+        const added = newlyAvailable.slice(0, Math.max(0, 100 - selection.values.length));
+        if (added.length) {
+          next[column] = { mode: 'include', values: [...selection.values, ...added] };
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+    previousOptions.current = options;
+  }, [options, loadingOptions]);
   useEffect(() => { changeNavTitle(title); }, [title]);
   useEffect(() => {
     const controller = new AbortController();
