@@ -1,135 +1,157 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@iconify/react';
+import { isAxiosError } from 'axios';
 import { analytics, errorMessage } from 'config/Analytics';
 import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
-import { ChartFilterOptions, FilterOptions, SectionFilters, Widget, WorkspaceView } from 'types/Generator';
+import { FilterOptions, SectionFilters, SectionRenderResponse, SectionWidgetRender, Widget, WorkspaceView } from 'types/Generator';
 import SavedChart from 'components/analytics/SavedChart';
 import SectionFilterBar from 'components/analytics/SectionFilterBar';
 import { suggestFilterColumns } from 'utils/sectionFilters';
 import './chart-generator.css';
 
 type Props = { workspaceId: string; title: string; dashboardName?: string; dashboardPath?: string };
+type RequestFilters = Record<string, string[] | { exclude: string[] }>;
+
 export default function SavedDashboard(props: Props) { return <SectionDashboard key={props.workspaceId} {...props} />; }
+
+function requestFilters(filters: SectionFilters): RequestFilters {
+  return Object.fromEntries(Object.entries(filters).map(([column, selection]) => [
+    column,
+    selection.mode === 'exclude' ? { exclude: selection.values } : selection.values,
+  ]));
+}
+
+function catalogFrom(options: FilterOptions): FilterOptions {
+  return Object.fromEntries(Object.entries(options).map(([column, option]) => [column, {
+    values: [], type: option.type, total: option.unfiltered_total ?? option.total,
+  }]));
+}
 
 function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: Props) {
   const { changeNavTitle } = useContext(NavbarContext);
   const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [refresh, setRefresh] = useState(0);
-  const [googleToken, setGoogleToken] = useState('');
-  const [optionsByChart, setOptionsByChart] = useState<Record<string, ChartFilterOptions>>({});
-  const [catalogByChart, setCatalogByChart] = useState<Record<string, FilterOptions>>({});
+  const [results, setResults] = useState<Record<string, SectionWidgetRender>>({});
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({});
+  const [catalog, setCatalog] = useState<FilterOptions>({});
   const [filters, setFilters] = useState<SectionFilters>({});
-  const previousOptions = useRef<FilterOptions>({});
-  const onOptions = useCallback((response: ChartFilterOptions, deniedMessage?: string) => {
-    if (deniedMessage) { setWorkspace(null); setOptionsByChart({}); setCatalogByChart({}); setFilters({}); setError(deniedMessage); return; }
-    setOptionsByChart(previous => ({ ...previous, [response.widget.id]: response }));
-    // Retain field metadata (not stale values) so legacy controls do not disappear
-    // while a request is pending or when another filter narrows their cardinality.
-    if (response.options) setCatalogByChart(previous => ({ ...previous, [response.widget.id]: Object.fromEntries(
-      Object.entries(response.options!).map(([column, option]) => [column, { values: [], type: option.type, total: option.unfiltered_total ?? option.total }]),
-    ) }));
-  }, []);
-  const catalog = useMemo(() => {
-    const merged: FilterOptions = {};
-    for (const widget of workspace?.widgets || []) {
-      for (const [column, option] of Object.entries(catalogByChart[widget.id] || {})) {
-        merged[column] = { ...option, total: Math.max(merged[column]?.total || 0, option.total) };
+  const [error, setError] = useState('');
+  const [snapshotExpired, setSnapshotExpired] = useState(false);
+  const [viewLoading, setViewLoading] = useState(true);
+  const [rendering, setRendering] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [googleToken, setGoogleToken] = useState('');
+  const [connectionVersion, setConnectionVersion] = useState(0);
+  const snapshotId = useRef('');
+  const request = useRef<AbortController | null>(null);
+  const requestVersion = useRef(0);
+
+  const legacyColumns = useMemo(() => new Set(workspace?.widgets.flatMap(({ config }) => [
+    config.x_col, config.y_col, config.group_col, ...Object.keys(config.filters || {}),
+  ])), [workspace]);
+  const legacyOptions = useMemo(() => Object.fromEntries(
+    Object.entries(catalog).filter(([column]) => legacyColumns.has(column)),
+  ), [catalog, legacyColumns]);
+  const columns = workspace?.filter_columns ?? [...new Set([
+    ...suggestFilterColumns(legacyOptions),
+    ...Object.keys(filters).filter(column => filters[column].values.length),
+  ])];
+  const filterSignature = JSON.stringify(Object.fromEntries(Object.entries(filters).filter(([column, selection]) =>
+    columns.includes(column) && selection.values.length,
+  )));
+  const activeFilters = useMemo<SectionFilters>(() => JSON.parse(filterSignature), [filterSignature]);
+
+  const renderSection = useCallback(async (selectedFilters: SectionFilters, refresh = false) => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    const version = ++requestVersion.current;
+    setRendering(true); setRefreshing(refresh); setError(''); setSnapshotExpired(false);
+    try {
+      const body: { filters: RequestFilters; refresh?: boolean; snapshot_id?: string } = {
+        filters: requestFilters(selectedFilters),
+      };
+      if (refresh) body.refresh = true;
+      if (snapshotId.current) body.snapshot_id = snapshotId.current;
+      const { data } = await analytics.post<SectionRenderResponse>(`/v2/workspaces/${encodeURIComponent(workspaceId)}/render`, body, {
+        signal: controller.signal,
+        headers: googleToken ? { 'X-Google-Access-Token': googleToken } : {},
+      });
+      if (controller.signal.aborted || version !== requestVersion.current) return;
+      snapshotId.current = data.snapshot_id;
+      setWorkspace(data.workspace);
+      setResults(data.widgets);
+      setFilterOptions(data.filter_options || {});
+      setCatalog(previous => ({ ...previous, ...catalogFrom(data.filter_options || {}) }));
+    } catch (cause) {
+      if (controller.signal.aborted || version !== requestVersion.current) return;
+      const status = isAxiosError(cause) ? cause.response?.status : undefined;
+      if ([401, 403, 404].includes(status || 0)) {
+        snapshotId.current = '';
+        setWorkspace(null); setResults({}); setFilterOptions({}); setCatalog({}); setFilters({});
+      }
+      setSnapshotExpired(status === 409 && !!snapshotId.current && !refresh);
+      setError(errorMessage(cause));
+    } finally {
+      if (!controller.signal.aborted && version === requestVersion.current) {
+        setRendering(false); setRefreshing(false);
       }
     }
-    return merged;
-  }, [catalogByChart, workspace]);
-  const legacyColumns = new Set(workspace?.widgets.flatMap(({ config }) => [config.x_col, config.y_col, config.group_col, ...Object.keys(config.filters || {})]));
-  const legacyOptions = Object.fromEntries(Object.entries(catalog).filter(([column]) => legacyColumns.has(column)));
-  // Keep active controls visible even if a temporary source error clears their suggestions.
-  const columns = workspace?.filter_columns ?? [...new Set([...suggestFilterColumns(legacyOptions), ...Object.keys(filters).filter(c => filters[c].values.length)])];
-  const signature = JSON.stringify(Object.fromEntries(Object.entries(filters).filter(([column, selection]) => columns.includes(column) && selection.values.length)));
-  const activeFilters = useMemo<SectionFilters>(() => JSON.parse(signature), [signature]);
-  const loadingOptions = !!workspace?.widgets.some(widget => {
-    const entry = optionsByChart[widget.id];
-    return entry?.widget !== widget || entry.filters !== activeFilters || entry.options === undefined;
-  });
-  const options = useMemo(() => {
-    const merged: FilterOptions = {}, ranks: Record<string, number> = {};
-    // Publish one coherent set of choices, never a mixture of old/new chart responses.
-    if (loadingOptions) return merged;
-    for (const widget of workspace?.widgets || []) {
-      const entry = optionsByChart[widget.id];
-      if (entry?.widget !== widget || entry.filters !== activeFilters) continue;
-      const rank = entry.ignoredFilters?.length || 0;
-      for (const [column, option] of Object.entries(entry.options || {})) {
-        // A sheet missing e.g. Mes must not reintroduce choices discarded by sheets
-        // which can apply it. Prefer the most compatible charts for each field.
-        if (ranks[column] !== undefined && rank > ranks[column]) continue;
-        if (ranks[column] !== rank) delete merged[column];
-        ranks[column] = rank;
-        const previous = merged[column];
-        const values = [...new Set([...(previous?.values || []), ...option.values])];
-        const selected = activeFilters[column]?.values || [];
-        const available = option.available_selected ?? selected.filter(value => option.values.includes(value) || option.total > option.values.length);
-        merged[column] = { values: values.slice(0, 100), total: Math.max(values.length, previous?.total || 0, option.total), type: option.type,
-          available_selected: [...new Set([...(previous?.available_selected || []), ...available])] };
-      }
-    }
-    return merged;
-  }, [optionsByChart, workspace, activeFilters, loadingOptions]);
-  useEffect(() => {
-    if (loadingOptions) return;
-    const previous = previousOptions.current;
-    setFilters(current => {
-      const next = { ...current };
-      let changed = false;
-      for (const [column, option] of Object.entries(options)) {
-        const selection = current[column];
-        if (selection?.mode !== 'include') continue;
-        const known = new Set(previous[column]?.values || []);
-        const selected = new Set(selection.values);
-        const newlyAvailable = option.values.filter(value => !known.has(value) && !selected.has(value));
-        const added = newlyAvailable.slice(0, Math.max(0, 100 - selection.values.length));
-        if (added.length) {
-          next[column] = { mode: 'include', values: [...selection.values, ...added] };
-          changed = true;
-        }
-      }
-      return changed ? next : current;
-    });
-    previousOptions.current = options;
-  }, [options, loadingOptions]);
-  useEffect(() => { changeNavTitle(title); }, [title]);
+  }, [googleToken, workspaceId]);
+
+  useEffect(() => { changeNavTitle(title); }, [title, changeNavTitle]);
+
   useEffect(() => {
     const controller = new AbortController();
-    setBusy(true); setError('');
-    const run = async () => {
-      try {
-        const { data } = await analytics.get<WorkspaceView>(`/v2/workspaces/${workspaceId}/view`, { signal: controller.signal });
-        if (controller.signal.aborted) return;
-        setWorkspace(data);
-      } catch (e) { if (!controller.signal.aborted) { setWorkspace(null); setOptionsByChart({}); setFilters({}); setError(errorMessage(e)); } }
-      finally { if (!controller.signal.aborted) setBusy(false); }
-    };
-    run();
+    request.current?.abort();
+    requestVersion.current++;
+    snapshotId.current = '';
+    setWorkspace(null); setResults({}); setFilterOptions({}); setCatalog({}); setFilters({});
+    setViewLoading(true); setRendering(false); setRefreshing(false); setError(''); setSnapshotExpired(false);
+    analytics.get<WorkspaceView>(`/v2/workspaces/${encodeURIComponent(workspaceId)}/view`, { signal: controller.signal })
+      .then(({ data }) => { if (!controller.signal.aborted) setWorkspace(data); })
+      .catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); })
+      .finally(() => { if (!controller.signal.aborted) setViewLoading(false); });
     return () => controller.abort();
-  }, [workspaceId, refresh]);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (workspace) void renderSection(activeFilters);
+  }, [workspace?._id, filterSignature, googleToken, connectionVersion, renderSection]);
+
+  useEffect(() => () => request.current?.abort(), []);
+
   const widgets = workspace?._id === workspaceId ? workspace.widgets : [];
   const counters = widgets.filter(widget => widget.config.chart_type === 'indicator');
   const charts = widgets.filter(widget => widget.config.chart_type !== 'indicator');
-  const renderWidget = (widget: Widget) => <SavedChart key={`${workspaceId}:${widget.id}`} workspaceId={workspaceId} widget={widget} googleToken={googleToken} filters={activeFilters} onOptions={onOptions} />;
+  const retry = () => { void renderSection(activeFilters); };
+  const refreshData = () => { void renderSection(activeFilters, true); };
+  const handleConnectionChange = () => {
+    snapshotId.current = '';
+    setResults({}); setFilterOptions({}); setSnapshotExpired(false);
+    setConnectionVersion(version => version + 1);
+  };
+  const renderWidget = (widget: Widget) => <SavedChart key={widget.id} widget={widget} rendered={results[widget.id]}
+    updating={rendering} onRetry={retry} />;
+  const busy = viewLoading || rendering;
+  const statusText = viewLoading ? 'Cargando sección…' : rendering
+    ? (refreshing ? 'Actualizando datos…' : 'Aplicando filtros…')
+    : 'Los filtros se aplican a los gráficos compatibles de la sección';
+
   return <main className="generator saved-dashboard">
     {dashboardPath && <Link className="generator-link-button" to={dashboardPath}>← Volver a {dashboardName}</Link>}
     <header className="generator-hero">
-      <div><span className="generator-eyebrow">SECCIÓN · {dashboardName || 'GRÁFICOS'}</span><h1>{title}</h1><p>{workspace?.widgets.length ?? '…'} {workspace?.widgets.length === 1 ? 'gráfico' : 'gráficos'} · {busy ? 'Cargando sección…' : 'Los filtros se aplican a los gráficos compatibles de la sección'}</p></div>
-      <div className="generator-controls"><button onClick={() => setRefresh(v => v + 1)} disabled={busy}><Icon icon="material-symbols:refresh" width={20} /> Actualizar datos</button>
+      <div><span className="generator-eyebrow">SECCIÓN · {dashboardName || 'GRÁFICOS'}</span><h1>{title}</h1><p>{workspace?.widgets.length ?? '…'} {workspace?.widgets.length === 1 ? 'gráfico' : 'gráficos'} · {statusText}</p></div>
+      <div className="generator-controls"><button onClick={refreshData} disabled={busy || !workspace}><Icon icon="material-symbols:refresh" width={20} /> Actualizar datos</button>
         {workspace?.can_edit && <Link className="generator-link-button" to={`/generador?editar=${encodeURIComponent(workspaceId)}`}><Icon icon="material-symbols:edit-outline" width={20} /> Editar gráficos y accesos</Link>}
       </div>
     </header>
-    {error && <p role="alert" className="generator-error">{error}</p>}
+    {error && <p role="alert" className="generator-error">{error} <button type="button" onClick={snapshotExpired ? refreshData : retry} disabled={busy}>{snapshotExpired ? 'Actualizar datos' : 'Reintentar'}</button></p>}
     {workspace?.source_kind === 'google' && (workspace.source_access_mode === 'public'
-      ? <p className="generator-hint">Google Sheets · Enlace público. No hace falta conectar una cuenta para actualizar estos gráficos.</p>
-      : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={() => setRefresh(v => v + 1)} busy={busy} />)}
-    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={options} values={activeFilters} loading={loadingOptions} onChange={setFilters} />}
+      ? <p className="generator-hint">Google Sheets · Los datos se leen al entrar o al usar Actualizar datos.</p>
+      : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={handleConnectionChange} busy={busy} />)}
+    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} />}
     {counters.length > 0 && <section className="generator-counters" aria-label="Contadores de la sección">{counters.map(renderWidget)}</section>}
     {charts.length > 0 && <div className="generator-grid">{charts.map(renderWidget)}</div>}
   </main>;

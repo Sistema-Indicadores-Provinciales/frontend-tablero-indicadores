@@ -38,6 +38,15 @@ async function system(page: Page, { emptySection = false, guest = false } = {}) 
       data = method === 'GET' && path === '/v2/workspaces' ? state.workspace ? [state.workspace] : [] : state.workspace;
     }
     else if (path === '/v2/workspaces/saved/view') data = { ...state.workspace, can_edit: !guest, source_kind: state.workspace?.source_id === 'google-source' ? 'google' : 'upload', source_access_mode: state.workspace?.source_id === 'google-source' ? 'public' : undefined };
+    else if (path === '/v2/workspaces/saved/render') {
+      const chart = { labels: ['Total'], datasets: [{ label: 'Total', data: [1500] }], filtered_rows: 2, warnings: [], filter_options: {} };
+      data = {
+        snapshot_id: 'snapshot',
+        workspace: { ...state.workspace, can_edit: !guest, source_kind: state.workspace?.source_id === 'google-source' ? 'google' : 'upload', source_access_mode: state.workspace?.source_id === 'google-source' ? 'public' : undefined },
+        widgets: Object.fromEntries((state.workspace?.widgets || []).map((item: any) => [item.id, { data: chart }])),
+        filter_options: {},
+      };
+    }
     else if (path === '/v2/sources') data = state.sources;
     else if (path === '/v2/sources/upload') { data = { _id: 'uploaded', name: 'Nuevo.csv', kind: 'upload' }; state.sources.push(data); }
     else if (path === '/v2/sources/google') { data = { _id: 'google-source', name: 'Hoja pública', kind: 'google', access_mode: 'public' }; state.sources.push(data); }
@@ -141,6 +150,6 @@ test('public Sheets import keeps the selected section and saved charts need no G
   expect(state.workspace.source_id).toBe('google-source');
   await page.reload();
   await expect(page.locator('.generator-indicator strong')).toHaveText('1.500');
-  await expect(page.getByText('Google Sheets · Enlace público.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Google Sheets · Los datos se leen al entrar o al usar Actualizar datos.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Conectar Google', exact: true })).toHaveCount(0);
 });

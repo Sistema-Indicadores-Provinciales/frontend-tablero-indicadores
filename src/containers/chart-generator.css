@@ -60,6 +60,8 @@
 .section-filter-control .MuiButton-endIcon { margin-left: 6px; }
 .section-filter-bar .section-filter-clear { flex-shrink: 0; font-size: 11px; min-height: 36px; border-radius: 3px; }
 .saved-dashboard .generator-widget { scroll-margin-top: 145px; isolation: isolate; }
+.saved-dashboard .generator-chart-content { opacity: 1; filter: saturate(1); transition: opacity 160ms ease, filter 160ms ease; }
+.saved-dashboard .generator-widget[data-updating="true"] .generator-chart-content { opacity: .48; filter: saturate(.7); pointer-events: none; }
 .generator .filter-field-picker { max-width: 720px; margin: 12px 0; }
 .generator .filter-field-picker label { max-width: none; }
 .generator .generator-restrictions { margin-top: 16px; }

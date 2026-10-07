@@ -35,6 +35,18 @@ async function mockSystem(page: Page, { old = false, viewer = false, failPublish
       if (state.revoked) { status = 404; data = { detail: 'El tablero no está disponible o no tenés acceso.' }; }
       else data = { ...state.workspaces[0], can_edit: !viewer, source_kind: 'upload' };
     }
+    else if (path === '/v2/workspaces/saved/render') {
+      if (state.revoked) { status = 404; data = { detail: 'El tablero no está disponible o no tenés acceso.' }; }
+      else {
+        const chart = { labels: ['Total'], datasets: [{ label: 'Total', data: [1500] }], filtered_rows: 2, warnings: [], filter_options: {} };
+        data = {
+          snapshot_id: 'snapshot',
+          workspace: { ...state.workspaces[0], can_edit: !viewer, source_kind: 'upload' },
+          widgets: Object.fromEntries((state.workspaces[0]?.widgets || []).map((item: any) => [item.id, { data: chart }])),
+          filter_options: {},
+        };
+      }
+    }
     else if (path.endsWith('/chart')) data = { labels: ['Total'], datasets: [{ label: 'Total', data: [1500] }], filtered_rows: 2, warnings: [] };
     else if (path === '/v2/sources') data = [{ _id: 'file', name: 'Ingresos.xlsx', kind: 'upload' }];
     else if (path.endsWith('/sheets')) data = ['Datos'];

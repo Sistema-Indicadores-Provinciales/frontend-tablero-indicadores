@@ -50,10 +50,11 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
   const pie = kind === 'pie' || kind === 'donut';
   if (widget.library === 'ECharts') {
     let series: any[] = datasets.map(s => ({
-      name: s.label, type: ['bar', 'horizontal', 'stacked'].includes(renderKind) ? 'bar' : renderKind === 'scatter' ? 'scatter' : 'line',
-      data: renderKind === 'scatter' ? s.data.map((v, i) => [s.x?.[i], v]) : s.data,
+      id: `series:${s.label}`, name: s.label,
+      type: ['bar', 'horizontal', 'stacked'].includes(renderKind) ? 'bar' : renderKind === 'scatter' ? 'scatter' : 'line',
+      data: renderKind === 'scatter' ? s.data.map((v, i) => [s.x?.[i], v]) : s.data.map((value, i) => ({ name: String(labels[i]), value })),
       stack: kind === 'stacked' ? 'total' : undefined,
-      areaStyle: kind === 'area' ? {} : undefined, connectNulls: false,
+      areaStyle: kind === 'area' ? {} : undefined, connectNulls: false, universalTransition: true,
     }));
     const axisStyle = {
       axisLabel: { color: chartTheme.textSecondary },
@@ -65,11 +66,12 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     let yAxis: any = { ...axisStyle, type: 'value', name: yLabel };
     if (kind === 'horizontal') [xAxis, yAxis] = [yAxis, xAxis];
     if (pie) {
-      series = [{ type: 'pie', radius: kind === 'donut' ? ['40%', '65%'] : '65%', data: labels.map((name, i) => ({ name: String(name), value: datasets[0].data[i] })) }];
+      series = [{ id: 'series:pie', type: 'pie', radius: kind === 'donut' ? ['40%', '65%'] : '65%',
+        universalTransition: true, data: labels.map((name, i) => ({ id: String(name), name: String(name), value: datasets[0].data[i] })) }];
       xAxis = yAxis = [];
     }
     if (kind === 'box') {
-      series = [{ type: 'boxplot', data: datasets.map(s => {
+      series = [{ id: 'series:box', type: 'boxplot', universalTransition: true, data: datasets.map(s => {
         const a = s.data.filter((v): v is number => v !== null).sort((a, b) => a - b);
         return [a[0], quantile(a, .25), quantile(a, .5), quantile(a, .75), a[a.length - 1]];
       }) }];
@@ -78,10 +80,13 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     const heatValues = datasets.flatMap(s => s.data.filter((v): v is number => v !== null));
     if (kind === 'heatmap') {
       yAxis = { ...axisStyle, type: 'category', data: datasets.map(s => s.label) };
-      series = [{ type: 'heatmap', data: datasets.flatMap((s, row) => s.data.flatMap((v, col) => v == null ? [] : [[col, row, v]])) }];
+      series = [{ id: 'series:heatmap', type: 'heatmap', universalTransition: true,
+        data: datasets.flatMap((s, row) => s.data.flatMap((v, col) => v == null ? [] : [[col, row, v]])) }];
     }
     return <Suspense fallback={<p>Cargando gráfico…</p>}><ResponsiveECharts style={{ height: 450 }} replaceMerge={['series', 'xAxis', 'yAxis', 'visualMap']} option={{
       color: chartTheme.colors,
+      animationDurationUpdate: 320,
+      animationEasingUpdate: 'cubicOut',
       backgroundColor: chartTheme.paper,
       textStyle: { color: chartTheme.text, fontFamily: chartTheme.fontFamily },
       tooltip: { trigger: pie || kind === 'scatter' || kind === 'heatmap' ? 'item' : 'axis', renderMode: 'richText', backgroundColor: chartTheme.tooltipBackground, borderColor: chartTheme.border, textStyle: { color: chartTheme.tooltipText } },

@@ -43,24 +43,30 @@ async function setup(page: Page, legacy = false, contextual = false) {
     else if (path === '/v2/sources') data = [{ _id: 'file', name: 'Intervenciones.xlsx', kind: 'upload' }];
     else if (path.endsWith('/sheets')) data = ['Datos'];
     else if (path.endsWith('/preview')) data = { columns, column_meta: Object.fromEntries(columns.map(c => [c, { type: options[c as keyof typeof options].type, unique_values: options[c as keyof typeof options].values, unique_count: options[c as keyof typeof options].total }])), row_count: 3, preview: [], raw_preview: [], warnings: [] };
-    else if (/\/widgets\/\d\/chart$/.test(path)) {
-      const id = path.split('/').at(-2)!;
-      const filters = req.method() === 'POST' ? req.postDataJSON().filters : {};
-      state.requests.push({ id, filters });
+    else if (path === '/v2/workspaces/saved/render') {
+      const filters = req.postDataJSON().filters || {};
       if (state.denied) { status = 404; data = { detail: 'No tenés acceso a esta sección.' }; }
-      else if (contextual) {
-        const matches = (row: Record<string, string | number>, except?: string) => Object.entries(filters as Record<string, string[]>).every(([column, values]) => column === except || !values.length || values.includes(String(row[column])));
-        const rows = state.rows.filter(row => matches(row));
-        data = { labels: ['Total'], datasets: [{ label: 'Total', data: [id === '3' ? 7 : rows.reduce((sum, row) => sum + Number(row.Total), 0)] }], filtered_rows: id === '3' ? 1 : rows.length, warnings: [],
-          filter_options: id === '3' ? { Tipo: { values: ['Grupal'], total: 1 } } : Object.fromEntries((state.workspace.filter_columns || []).map(column => {
-            const values = [...new Set(state.rows.filter(row => matches(row, column)).map(row => String(row[column])))];
-            return [column, { values: values.slice(0, 100), total: values.length, type: options[column as keyof typeof options].type,
-              unfiltered_total: new Set(state.rows.map(row => row[column])).size, available_selected: (filters[column] || []).filter((value: string) => values.includes(value)) }];
-          })), ignored_filters: id === '3' ? Object.keys(filters).filter(column => column !== 'Tipo') : [] };
+      else {
+        const render = (id: string) => {
+          state.requests.push({ id, filters });
+          if (contextual) {
+            const matches = (row: Record<string, string | number>, except?: string) => Object.entries(filters as Record<string, string[]>).every(([column, values]) => column === except || !values.length || values.includes(String(row[column])));
+            const rows = state.rows.filter(row => matches(row));
+            return { data: { labels: ['Total'], datasets: [{ label: 'Total', data: [id === '3' ? 7 : rows.reduce((sum, row) => sum + Number(row.Total), 0)] }], filtered_rows: id === '3' ? 1 : rows.length, warnings: [],
+              filter_options: id === '3' ? { Tipo: { values: ['Grupal'], total: 1 } } : Object.fromEntries((state.workspace.filter_columns || []).map(column => {
+                const values = [...new Set(state.rows.filter(row => matches(row, column)).map(row => String(row[column])))];
+                return [column, { values: values.slice(0, 100), total: values.length, type: options[column as keyof typeof options].type,
+                  unfiltered_total: new Set(state.rows.map(row => row[column])).size, available_selected: (filters[column] || []).filter((value: string) => values.includes(value)) }];
+              })), ignored_filters: id === '3' ? Object.keys(filters).filter(column => column !== 'Tipo') : [] } };
+          }
+          return { data: { labels: ['Total'], datasets: [{ label: 'Total', data: [id === '3' ? 7 : filters.Mes?.length ? 10 : filters.Año?.length ? 30 : 100] }], filtered_rows: 3, warnings: [],
+            filter_options: Object.fromEntries(Object.entries(options).filter(([key]) => id !== '3' && (state.workspace.filter_columns?.includes(key) ?? true))),
+            ignored_filters: id === '3' ? Object.keys(filters) : [] } };
+        };
+        const rendered = Object.fromEntries(state.workspace.widgets.map(widget => [widget.id, render(widget.id)]));
+        data = { snapshot_id: 'snapshot', workspace: { ...state.workspace, can_edit: true, source_kind: 'upload' }, widgets: rendered,
+          filter_options: rendered['0'].data.filter_options };
       }
-      else data = { labels: ['Total'], datasets: [{ label: 'Total', data: [id === '3' ? 7 : filters.Mes?.length ? 10 : filters.Año?.length ? 30 : 100] }], filtered_rows: 3, warnings: [],
-        filter_options: Object.fromEntries(Object.entries(options).filter(([key]) => id !== '3' && (state.workspace.filter_columns?.includes(key) ?? true))),
-        ignored_filters: id === '3' ? Object.keys(filters) : [] };
     }
     await route.fulfill({ status, json: data });
   });
@@ -148,9 +154,8 @@ test('cascading choices hide Grupal in January, retain multi-select alternatives
   await months.getByRole('textbox').press('Escape');
   await expect(page.locator('.generator-indicator strong')).toHaveText(['35', '35', '35', '7']);
   await page.getByRole('button', { name: 'Filtrar por Tipo', exact: true }).click();
-  await popup.getByRole('checkbox', { name: 'Individual', exact: true }).check();
   await expect(popup.getByRole('checkbox', { name: 'Grupal', exact: true })).toBeVisible();
-  await popup.getByRole('textbox').press('Escape');
+  await popup.getByRole('button', { name: 'Solamente Individual', exact: true }).click();
   await expect(page.locator('.generator-indicator strong')).toHaveText(['15', '15', '15', '7']);
   await page.getByRole('button', { name: 'Limpiar filtros' }).click();
   await expect(page.locator('.generator-indicator strong')).toHaveText(['65', '65', '65', '7']);
@@ -184,17 +189,22 @@ test('cascading options wait for current chart responses and never mix with stal
   await setup(page, false, true);
   let started = false, release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/v2/workspaces/saved/widgets/0/chart', async route => {
-    if (route.request().method() !== 'POST' || !route.request().postDataJSON().filters.Mes?.includes('Enero')) return route.fallback();
+  await page.route('**/v2/workspaces/saved/render', async route => {
+    if (!route.request().postDataJSON().filters.Mes?.includes('Enero')) return route.fallback();
     started = true;
     await pending;
-    await route.fulfill({ json: { labels: ['Total'], datasets: [{ label: 'Total', data: [9999] }], filtered_rows: 1, warnings: [],
-      filter_options: { Tipo: { values: ['Obsoleto'], total: 1 } } } });
+    await route.fallback();
   });
   await page.goto('/educacion/intervenciones');
   await only(page, 'Mes', 'Enero');
   await expect.poll(() => started).toBe(true);
-  await expect(page.getByRole('button', { name: 'Filtrar por Tipo', exact: true })).toBeDisabled();
+  const type = page.getByRole('button', { name: 'Filtrar por Tipo', exact: true });
+  await expect(type).toBeEnabled();
+  await type.click();
+  const pendingType = page.getByRole('dialog', { name: 'Filtrar por Tipo' });
+  await expect(pendingType.getByRole('status')).toHaveText('Actualizando opciones…');
+  await expect(pendingType.getByRole('checkbox', { name: 'Individual', exact: true })).toBeDisabled();
+  await pendingType.getByRole('textbox').press('Escape');
   await page.getByRole('button', { name: 'Limpiar filtros' }).click();
   await only(page, 'Mes', 'Febrero');
   release();
@@ -274,11 +284,11 @@ test('rapid filter changes discard a slow previous response', async ({ page }) =
   const state = await setup(page);
   let started = false, release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/v2/workspaces/saved/widgets/0/chart', async route => {
-    if (route.request().method() !== 'POST' || !route.request().postDataJSON().filters.Año?.includes('2025')) return route.fallback();
+  await page.route('**/v2/workspaces/saved/render', async route => {
+    if (!route.request().postDataJSON().filters.Año?.includes('2025')) return route.fallback();
     started = true;
     await pending;
-    await route.fulfill({ json: { labels: ['Total'], datasets: [{ label: 'Total', data: [9999] }], filtered_rows: 1, warnings: [], filter_options: options } });
+    await route.fallback();
   });
   await page.goto('/educacion/intervenciones');
   const bar = page.getByRole('region', { name: 'Filtros de la sección' });
@@ -290,7 +300,7 @@ test('rapid filter changes discard a slow previous response', async ({ page }) =
   await only(page, 'Año', '2026');
   release();
   await expect(page.locator('.generator-indicator strong')).toHaveText(['30', '30', '30', '7']);
-  expect(state.requests.filter(r => r.id === '0').at(-1)?.filters).toEqual({ Año: ['2026'] });
+  expect(state.requests.filter(r => r.id === '0').map(request => request.filters)).toContainEqual({ Año: ['2026'] });
 });
 
 test('search, multiple selections and Solamente work in dark mode and the popup fits a phone', async ({ page }) => {
@@ -304,6 +314,7 @@ test('search, multiple selections and Solamente work in dark mode and the popup 
   await page.screenshot({ path: 'test-results/compact-counters-dark.png', fullPage: true });
   await bar.getByRole('button', { name: 'Filtrar por Mes' }).click();
   const popup = page.getByRole('dialog', { name: 'Filtrar por Mes' });
+  await popup.getByRole('checkbox', { name: 'Todos', exact: true }).uncheck();
   await popup.getByRole('checkbox', { name: 'Enero', exact: true }).check();
   await popup.getByRole('checkbox', { name: 'Febrero', exact: true }).check();
   await expect(popup.getByText('2 seleccionados', { exact: true })).toBeVisible();
@@ -324,6 +335,7 @@ test('search, multiple selections and Solamente work in dark mode and the popup 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => window.scrollTo(0, 700));
   await bar.getByRole('button', { name: 'Filtrar por Mes' }).click();
+  await popup.getByRole('checkbox', { name: 'Todos', exact: true }).uncheck();
   await popup.getByRole('checkbox', { name: 'Enero', exact: true }).check();
   await popup.getByRole('checkbox', { name: 'Todos', exact: true }).check();
   await expect.poll(() => state.requests.filter(r => r.id === '0').at(-1)?.filters).toEqual({});

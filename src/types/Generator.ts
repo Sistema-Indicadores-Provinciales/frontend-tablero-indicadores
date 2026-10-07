@@ -32,6 +32,13 @@ export interface SectionDestination { dashboardId: string; sectionId: string; }
 export interface DestinationOption extends SectionDestination { dashboardName: string; sectionName: string; path: string; }
 export interface Workspace { _id: string; name: string; source_id: string; widgets: Widget[]; destination?: SectionDestination; filter_columns?: string[]; }
 export interface WorkspaceView extends Workspace { can_edit: boolean; source_kind: Source['kind']; source_access_mode?: 'public'; }
+export interface SectionWidgetRender { data?: ChartData; error?: string; }
+export interface SectionRenderResponse {
+  snapshot_id: string;
+  workspace: WorkspaceView;
+  widgets: Record<string, SectionWidgetRender>;
+  filter_options: FilterOptions;
+}
 export interface Publication {
   published: boolean; canShare: boolean; currentUserId: string; canView?: boolean; users: { _id: string; username: string }[]; recipientIds: string[];
   name?: string; icon?: string; path?: string; show?: boolean;

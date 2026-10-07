@@ -32,16 +32,22 @@ async function setup(page: Page, privateSheet = true) {
     }
     else if (url.pathname === '/v2/google/connection') { state.connected.delete(user); data = { connected: false, revoked: true }; }
     else if (url.pathname === '/v2/workspaces/saved/view') data = { _id: 'saved', name: 'Gráficos', source_id: 'source', widgets: [widget], can_edit: false, source_kind: privateSheet ? 'google' : 'upload' };
-    else if (url.pathname.endsWith('/widgets/chart/chart')) {
+    else if (url.pathname === '/v2/workspaces/saved/render') {
       expect(req.headers()['x-google-access-token']).toBeUndefined();
-      const filters = method === 'POST' ? req.postDataJSON().filters : {};
+      const filters = req.postDataJSON().filters || {};
       state.requests.push({ user, filters });
       if (privateSheet && (!state.connected.has(user) || state.expired)) { status = 409; data = { detail: 'Google requiere una nueva autorización. Volvé a conectar tu cuenta.' }; }
       else if (state.chartFailure) { status = 503; data = { detail: 'No se pudieron consultar los datos.' }; }
       else {
         const selected = filters.Mes || [], noRows = state.noRows;
-        data = { labels: ['Total'], datasets: noRows ? [] : [{ label: 'Total', data: [selected.includes('Enero') ? 500 : 1500] }], filtered_rows: noRows ? 0 : selected.length ? 1 : 2,
+        const chart = { labels: ['Total'], datasets: noRows ? [] : [{ label: 'Total', data: [selected.includes('Enero') ? 500 : 1500] }], filtered_rows: noRows ? 0 : selected.length ? 1 : 2,
           warnings: [], filter_options: { Mes: { values: ['Enero', 'Febrero'], total: 2 }, Valor: { values: ['500', '1000'], total: 2 } } };
+        data = {
+          snapshot_id: 'snapshot',
+          workspace: { _id: 'saved', name: 'Gráficos', source_id: 'source', widgets: [widget], can_edit: false, source_kind: privateSheet ? 'google' : 'upload' },
+          widgets: { chart: { data: chart } },
+          filter_options: chart.filter_options,
+        };
       }
     }
     else if (url.pathname.includes('/v2/workspaces') && ['POST', 'PUT'].includes(method)) state.savedChanges++;
@@ -119,7 +125,7 @@ test('viewers filter and clear without editing, keep filters when refreshing and
   state.chartFailure = true;
   await page.getByRole('button', { name: 'Actualizar datos', exact: true }).click();
   await expect(page.getByText('No se pudieron consultar los datos.')).toBeVisible();
-  await expect(page.locator('.generator-indicator strong')).toHaveCount(0);
+  await expect(page.locator('.generator-indicator strong')).toHaveText('1.500');
   state.chartFailure = false;
   await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
   await expect(page.locator('.generator-indicator strong')).toHaveText('1.500');
