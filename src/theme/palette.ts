@@ -18,6 +18,10 @@ export interface AppPalette {
   successText: string;
   warningBackground: string;
   warningText: string;
+  scrollbarTrack: string;
+  scrollbarThumb: string;
+  scrollbarThumbHover: string;
+  scrollbarArrow: string;
   series: string[];
 }
 
@@ -40,6 +44,10 @@ export const appColors: Record<ThemeMode, AppPalette> = {
     successText: '#146432',
     warningBackground: '#fff7e6',
     warningText: '#7a4d00',
+    scrollbarTrack: '#edf2f8',
+    scrollbarThumb: '#a8bad0',
+    scrollbarThumbHover: '#718cab',
+    scrollbarArrow: '#53657f',
     series: ['#2563eb', '#e11d48', '#f97316', '#16a34a', '#9333ea', '#0891b2', '#ca8a04', '#be123c', '#15803d', '#7c3aed', '#0284c7', '#dc2626'],
   },
   dark: {
@@ -60,6 +68,10 @@ export const appColors: Record<ThemeMode, AppPalette> = {
     successText: '#c3f4dc',
     warningBackground: '#493a25',
     warningText: '#ffe3ad',
+    scrollbarTrack: '#12243a',
+    scrollbarThumb: '#49698b',
+    scrollbarThumbHover: '#73b7ff',
+    scrollbarArrow: '#c3d7ef',
     series: ['#73b7ff', '#ff8fa7', '#ffb86b', '#69d5a4', '#c3a2ff', '#62d4e5', '#f2d06f', '#ffa6d5', '#98df86', '#a99bff', '#62b9ff', '#ff827d'],
   },
 };
