@@ -2,13 +2,14 @@ import { useId, useState } from 'react';
 import { Box, Button, Checkbox, Divider, FormControlLabel, InputAdornment, Popover, TextField, Typography } from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import SearchIcon from '@mui/icons-material/Search';
-import { FilterOptions, SectionFilterSelection, SectionFilters } from 'types/Generator';
+import { ColumnAliases, FilterOptions, SectionFilterSelection, SectionFilters } from 'types/Generator';
 import { sortFilterValues } from 'utils/sectionFilters';
+import { columnLabel } from 'utils/generatorConfig';
 
 const searchable = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 
-function FilterControl({ column, options, selection, loading, onChange }: {
-  column: string; options?: FilterOptions[string]; selection?: SectionFilterSelection; loading: boolean;
+function FilterControl({ column, displayName, options, selection, loading, onChange }: {
+  column: string; displayName: string; options?: FilterOptions[string]; selection?: SectionFilterSelection; loading: boolean;
   onChange: (selection?: SectionFilterSelection) => void;
 }) {
   const id = useId();
@@ -23,7 +24,8 @@ function FilterControl({ column, options, selection, loading, onChange }: {
   const unavailable = !loading && options
     ? selectedValues.filter(value => !availableSelected.includes(value) && !options.values.includes(value))
     : [];
-  const all = sortFilterValues(column, [...new Set([...(options?.values || []), ...selectedValues])]);
+  const combined = [...new Set([...(options?.values || []), ...selectedValues])];
+  const all = options?.sort_applied ? combined : sortFilterValues(column, combined);
   const shown = all.filter(value => searchable(value).includes(searchable(search)));
   const custom = search.trim();
   const canAddCustom = !loading && !!options && options.total > options.values.length;
@@ -78,23 +80,23 @@ function FilterControl({ column, options, selection, loading, onChange }: {
     setSearch('');
   };
 
-  const label = !active ? column : mode === 'exclude'
-    ? `${column} (excepto ${selectedValues.length})`
-    : selectedValues.length === 1 ? `${column}: ${selectedValues[0]}` : `${column} (${selectedValues.length})`;
+  const label = !active ? displayName : mode === 'exclude'
+    ? `${displayName} (excepto ${selectedValues.length})`
+    : selectedValues.length === 1 ? `${displayName}: ${selectedValues[0]}` : `${displayName} (${selectedValues.length})`;
 
   return <>
     <Button variant="outlined" className="section-filter-control" data-active={active}
-      aria-label={`Filtrar por ${column}`} title={`${column}: ${!active ? 'Todos' : mode === 'exclude' ? `Todos excepto ${selectedValues.join(', ')}` : selectedValues.join(', ')}`}
+      aria-label={`Filtrar por ${displayName}`} title={`${displayName}: ${!active ? 'Todos' : mode === 'exclude' ? `Todos excepto ${selectedValues.join(', ')}` : selectedValues.join(', ')}`}
       aria-haspopup="dialog" aria-expanded={!!anchor} aria-controls={anchor ? id : undefined}
       disabled={!options && !selectedValues.length} endIcon={<ArrowDropDownIcon />}
       onClick={event => { setPendingAll(false); setAnchor(event.currentTarget); }}><span className="section-filter-label">{label}</span></Button>
     <Popover open={!!anchor} anchorEl={anchor} onClose={close} disableScrollLock
       anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }} transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-      slotProps={{ paper: { id, role: 'dialog', 'aria-label': `Filtrar por ${column}`, sx: {
+      slotProps={{ paper: { id, role: 'dialog', 'aria-label': `Filtrar por ${displayName}`, sx: {
         width: 310, maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(460px, calc(100dvh - 100px))',
         display: 'flex', flexDirection: 'column', border: 1, borderColor: 'divider', mt: .5,
       } } }}>
-      <Typography fontWeight={600} fontSize={13} sx={{ px: 2, py: 1, bgcolor: 'app.elevated' }}>{column}</Typography>
+      <Typography fontWeight={600} fontSize={13} sx={{ px: 2, py: 1, bgcolor: 'app.elevated' }}>{displayName}</Typography>
       <Box sx={{ px: 1.5, pt: 1 }}>
         <TextField autoFocus fullWidth size="small" value={search} placeholder="Buscar un valor"
           onChange={event => setSearch(event.target.value)} onKeyDown={event => {
@@ -104,7 +106,7 @@ function FilterControl({ column, options, selection, loading, onChange }: {
             if (shown.length === 1) toggleValue(shown[0]);
             else if (!shown.length) addCustom();
           }}
-          inputProps={{ 'aria-label': `Buscar en ${column}`, maxLength: 2000 }}
+          inputProps={{ 'aria-label': `Buscar en ${displayName}`, maxLength: 2000 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <FormControlLabel control={<Checkbox size="small" checked={pendingAll ? false : allSelected}
@@ -120,7 +122,7 @@ function FilterControl({ column, options, selection, loading, onChange }: {
       </Box>
       <Divider />
       {loading && <Typography role="status" fontSize={12} color="text.secondary" sx={{ px: 1.5, py: 1 }}>Actualizando opciones…</Typography>}
-      <Box component="ul" aria-label={`Valores de ${column}`} sx={{ listStyle: 'none', p: .5, m: 0, overflowY: 'auto', minHeight: 0 }}>
+      <Box component="ul" aria-label={`Valores de ${displayName}`} sx={{ listStyle: 'none', p: .5, m: 0, overflowY: 'auto', minHeight: 0 }}>
         {shown.map(value => {
           const checked = pendingAll ? false : mode === 'exclude' ? !selectedValues.includes(value) : mode === 'include' ? selectedValues.includes(value) : true;
           const adding = pendingAll || !mode || !selectedValues.includes(value);
@@ -150,8 +152,8 @@ function FilterControl({ column, options, selection, loading, onChange }: {
   </>;
 }
 
-export default function SectionFilterBar({ columns, options, values, loading, onChange }: {
-  columns: string[]; options: FilterOptions; values: SectionFilters; loading: boolean; onChange: (values: SectionFilters) => void;
+export default function SectionFilterBar({ columns, options, values, loading, onChange, aliases }: {
+  columns: string[]; options: FilterOptions; values: SectionFilters; loading: boolean; aliases?: ColumnAliases; onChange: (values: SectionFilters) => void;
 }) {
   const update = (column: string, selection?: SectionFilterSelection) => {
     const next = { ...values };
@@ -161,7 +163,7 @@ export default function SectionFilterBar({ columns, options, values, loading, on
   };
   return <Box component="section" aria-label="Filtros de la sección" className="section-filter-bar">
     <div className="section-filter-controls">
-      {columns.map(column => <FilterControl key={column} column={column} options={options[column]} selection={values[column]} loading={loading}
+      {columns.map(column => <FilterControl key={column} column={column} displayName={columnLabel(column, aliases)} options={options[column]} selection={values[column]} loading={loading}
         onChange={selection => update(column, selection)} />)}
     </div>
     <Button className="section-filter-clear" size="small" variant="contained" onClick={() => onChange({})}>Limpiar filtros</Button>

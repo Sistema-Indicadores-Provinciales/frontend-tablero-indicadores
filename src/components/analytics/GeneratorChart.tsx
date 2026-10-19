@@ -1,9 +1,11 @@
 import { ComponentProps, lazy, Suspense, useCallback, useEffect, useRef } from 'react';
 import type EChartsReact from 'echarts-for-react';
-import { ChartData, Widget } from 'types/Generator';
+import { ChartData, ColumnAliases, Scalar, Widget } from 'types/Generator';
 import { useChartTheme } from 'utils/charts/chartTheme';
+import { columnLabel } from 'utils/generatorConfig';
 const Plot = lazy(() => import('react-plotly.js'));
 const ECharts = lazy(() => import('echarts-for-react'));
+const MapsChart = lazy(() => import('components/graphics/MapsChart'));
 function ResponsiveECharts(props: ComponentProps<typeof ECharts>) {
   const container = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsReact>(null);
@@ -23,14 +25,42 @@ const quantile = (a: number[], p: number) => {
   const index = (a.length - 1) * p, low = Math.floor(index);
   return a[low] + (a[Math.ceil(index)] - a[low]) * (index - low);
 };
-export default function GeneratorChart({ widget, result, showIndicatorTitle = true }: { widget: Widget; result: ChartData; showIndicatorTitle?: boolean }) {
+const mapValue = (value: Scalar) => value == null ? 'Sin dato'
+  : typeof value === 'number' ? value.toLocaleString('es-AR')
+  : typeof value === 'boolean' ? value ? 'Sí' : 'No' : String(value);
+export default function GeneratorChart({ widget, result, showIndicatorTitle = true, aliases }: {
+  widget: Widget; result: ChartData; showIndicatorTitle?: boolean; aliases?: ColumnAliases;
+}) {
   const chartTheme = useChartTheme();
   const kind = widget.config.chart_type;
-  if (kind === 'table') return <div className="generator-table"><table><thead><tr>{result.columns?.map(c => <th key={c}>{c}</th>)}</tr></thead><tbody>{result.records?.map((row, i) => <tr key={i}>{result.columns?.map(c => <td key={c}>{String(row[c] ?? '—')}</td>)}</tr>)}</tbody></table></div>;
+  if (kind === 'table') return <div className="generator-table"><table><thead><tr>{result.columns?.map(c => <th key={c}>{columnLabel(c, aliases)}</th>)}</tr></thead><tbody>{result.records?.map((row, i) => <tr key={i}>{result.columns?.map(c => <td key={c}>{String(row[c] ?? '—')}</td>)}</tr>)}</tbody></table></div>;
+  if (kind === 'map') {
+    const points = result.map_points || [];
+    if (!points.length) return <p>No hay coordenadas válidas para los filtros seleccionados.</p>;
+    const magnitudes = points.map(point => Math.abs(point.value || 0)).filter(value => value > 0);
+    const min = magnitudes.length ? Math.min(...magnitudes) : 0;
+    const max = magnitudes.length ? Math.max(...magnitudes) : 0;
+    const radius = (value?: number | null) => {
+      if (!value || max === min) return 6000;
+      return 2500 + ((Math.abs(value) - min) / (max - min)) * 22500;
+    };
+    const info = (point: NonNullable<ChartData['map_points']>[number]) => <div className="generator-map-info">
+      <strong>{point.label}</strong>
+      {!!point.metrics?.length && <dl>{point.metrics.map(metric => <div key={metric.field}><dt>{columnLabel(metric.field, aliases)}</dt><dd>{mapValue(metric.value)}</dd></div>)}</dl>}
+    </div>;
+    const markers = points.map(point => ({ id: point.id, position: { lat: point.lat, lng: point.lng }, title: point.label, data: point, infoContent: info(point) }));
+    const circles = points.map(point => ({ id: point.id, center: { lat: point.lat, lng: point.lng }, radius: radius(point.value), options: {
+      fillColor: chartTheme.colors[0], fillOpacity: .32, strokeColor: chartTheme.colors[0], strokeOpacity: .8, strokeWeight: 1,
+    }, data: point, infoContent: info(point) }));
+    return <Suspense fallback={<p>Cargando mapa…</p>}><div className="generator-map"><MapsChart height="450px"
+      displayMode={widget.config.map_mode || 'markers'} markers={markers} circles={circles} fitBounds highlightFormosa /></div></Suspense>;
+  }
   if (!result.datasets.length) return <p>No hay datos para los filtros seleccionados.</p>;
   if (kind === 'indicator') return <div className="generator-indicator"><strong>{result.datasets[0].data[0]?.toLocaleString('es-AR') ?? 'Sin datos'}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
   let labels = result.labels.map(v => v == null ? 'Sin dato' : v);
-  let datasets = result.datasets;
+  let datasets = result.datasets.map(dataset => ({ ...dataset, label: dataset.metric
+    ? `${columnLabel(dataset.metric, aliases)}${dataset.group !== undefined ? ` · ${dataset.group}` : ''}`
+    : !widget.config.group_col && kind !== 'box' ? columnLabel(dataset.label, aliases) : dataset.label }));
   let renderKind: string = kind;
   if (kind === 'histogram') {
     const values = datasets.flatMap(s => s.data.filter((v): v is number => v !== null));
@@ -45,8 +75,11 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     });
     renderKind = 'bar';
   }
-  const xLabel = kind === 'histogram' ? widget.config.y_col : widget.config.x_col;
-  const yLabel = kind === 'histogram' || widget.config.aggregation === 'count' ? 'Registros' : widget.config.y_col;
+  const xLabel = columnLabel(kind === 'histogram' ? widget.config.y_col : widget.config.x_col, aliases);
+  const renderedMetrics = new Set(result.datasets.flatMap(dataset => dataset.metric ? [dataset.metric] : []));
+  const yLabel = kind === 'histogram' || widget.config.aggregation === 'count'
+    ? 'Registros'
+    : renderedMetrics.size > 1 ? 'Valores' : columnLabel(widget.config.y_col, aliases);
   const pie = kind === 'pie' || kind === 'donut';
   if (widget.library === 'ECharts') {
     let series: any[] = datasets.map(s => ({

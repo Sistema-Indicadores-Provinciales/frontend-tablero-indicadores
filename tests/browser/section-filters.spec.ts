@@ -257,6 +257,28 @@ test('author chooses the visible fields in the generator and changes persist on 
   await expect(page.getByRole('region', { name: 'Filtros de la sección' })).toHaveCount(0);
 });
 
+test('column aliases and field-based ordering persist in the saved section', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/generador?editar=saved');
+  await expect(page.getByLabel('Nombre visible de Mes')).toBeVisible({ timeout: 60000 });
+  await page.getByLabel('Nombre visible de Mes').fill('Período');
+  await page.getByLabel('Orden de Período: campo').selectOption('Total');
+  await page.getByLabel('Orden de Período: tipo de orden').selectOption('sum');
+  await page.getByLabel('Orden de Período: dirección').selectOption('desc');
+  await page.getByText('Orden del gráfico', { exact: true }).click();
+  await page.getByLabel('Orden de categorías: campo').selectOption('Total');
+  await page.getByLabel('Orden de categorías: tipo de orden').selectOption('max');
+  await page.getByLabel('Orden de categorías: dirección').selectOption('desc');
+  await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
+  await expect.poll(() => state.saves.length).toBe(1);
+  expect(state.saves[0].column_aliases).toEqual({ Mes: 'Período' });
+  expect(state.saves[0].filter_sorts.Mes).toEqual({ field: 'Total', aggregation: 'sum', direction: 'desc' });
+  expect(state.saves[0].widgets[0].config.category_sort).toEqual({ field: 'Total', aggregation: 'max', direction: 'desc' });
+  await page.goto('/educacion/intervenciones');
+  await expect(page.getByRole('button', { name: 'Filtrar por Período', exact: true })).toBeVisible({ timeout: 60000 });
+});
+
 test('older sections suggest year and month rather than Total, and refresh preserves selections', async ({ page }) => {
   await setup(page, true);
   await page.goto('/educacion/intervenciones');

@@ -48,7 +48,8 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
   const requestVersion = useRef(0);
 
   const legacyColumns = useMemo(() => new Set(workspace?.widgets.flatMap(({ config }) => [
-    config.x_col, config.y_col, config.group_col, ...Object.keys(config.filters || {}),
+    config.x_col, config.y_col, ...(config.y_cols || []), config.group_col, ...Object.keys(config.filters || {}),
+    config.latitude_col || '', config.longitude_col || '', config.label_col || '', config.size_col || '', ...(config.map_metric_cols || []),
   ])), [workspace]);
   const legacyOptions = useMemo(() => Object.fromEntries(
     Object.entries(catalog).filter(([column]) => legacyColumns.has(column)),
@@ -133,7 +134,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     setConnectionVersion(version => version + 1);
   };
   const renderWidget = (widget: Widget) => <SavedChart key={widget.id} widget={widget} rendered={results[widget.id]}
-    updating={rendering} onRetry={retry} />;
+    updating={rendering} onRetry={retry} aliases={workspace?.column_aliases} />;
   const busy = viewLoading || rendering;
   const statusText = viewLoading ? 'Cargando sección…' : rendering
     ? (refreshing ? 'Actualizando datos…' : 'Aplicando filtros…')
@@ -151,7 +152,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     {workspace?.source_kind === 'google' && (workspace.source_access_mode === 'public'
       ? <p className="generator-hint">Google Sheets · Los datos se leen al entrar o al usar Actualizar datos.</p>
       : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={handleConnectionChange} busy={busy} />)}
-    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} />}
+    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} aliases={workspace.column_aliases} />}
     {counters.length > 0 && <section className="generator-counters" aria-label="Contadores de la sección">{counters.map(renderWidget)}</section>}
     {charts.length > 0 && <div className="generator-grid">{charts.map(renderWidget)}</div>}
   </main>;

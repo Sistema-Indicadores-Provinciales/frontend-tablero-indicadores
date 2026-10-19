@@ -79,6 +79,24 @@ test('filters invalidate previous results and saved configuration includes layou
   await expect(page.getByLabel('Mes', { exact: true })).toHaveValue('2');
 });
 
+test('allows additional metrics on compatible charts', async ({ page }) => {
+  await page.getByRole('combobox', { name: 'Valor / eje Y', exact: true }).selectOption('Valor');
+  await page.getByRole('combobox', { name: 'Operación', exact: true }).selectOption('sum');
+  const addMetric = page.getByRole('button', { name: 'Agregar otra métrica', exact: true });
+  await expect(addMetric).toBeEnabled();
+  await addMetric.click();
+  await expect(page.getByRole('combobox', { name: 'Métrica adicional 1', exact: true })).toHaveValue('Mes');
+  await expect(addMetric).toBeVisible();
+  const request = page.waitForRequest(r => r.url().endsWith('/v2/sources/test-source/chart'));
+  await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ y_col: 'Valor', y_cols: ['Mes'], aggregation: 'sum' });
+  await expect(page.locator('.js-plotly-plot')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Tipo de gráfico', exact: true }).selectOption('scatter');
+  await expect(addMetric).toBeDisabled();
+  await page.getByRole('combobox', { name: 'Tipo de gráfico', exact: true }).selectOption('table');
+  await expect(addMetric).toBeEnabled();
+});
+
 test('shows an API error without displaying a stale chart', async ({ page }) => {
   await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
   await expect(page.locator('.js-plotly-plot')).toBeVisible();
@@ -86,4 +104,22 @@ test('shows an API error without displaying a stale chart', async ({ page }) => 
   await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
   await expect(page.locator('.generator-widget').getByRole('alert')).toHaveText('La columna contiene texto.');
   await expect(page.locator('.js-plotly-plot')).toHaveCount(0);
+});
+
+test('map configuration supports points and proportional circles', async ({ page }) => {
+  await page.getByRole('combobox', { name: 'Tipo de gráfico', exact: true }).selectOption('map');
+  await expect(page.getByRole('combobox', { name: 'Presentación', exact: true })).toHaveValue('Google Maps');
+  await page.getByRole('combobox', { name: 'Latitud', exact: true }).selectOption('Mes');
+  await page.getByRole('combobox', { name: 'Longitud', exact: true }).selectOption('Valor');
+  await page.getByRole('combobox', { name: 'Representación', exact: true }).selectOption('circles');
+  await page.getByRole('combobox', { name: 'Tamaño de los círculos', exact: true }).selectOption('Valor');
+  const addMetric = page.getByRole('button', { name: 'Agregar otra métrica', exact: true });
+  await expect(addMetric).toBeEnabled();
+  await addMetric.click();
+  await expect(page.getByRole('combobox', { name: 'Métrica del mapa 1', exact: true })).toHaveValue('Mes');
+  const request = page.waitForRequest(r => r.url().endsWith('/v2/sources/test-source/chart'));
+  await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  const config = (await request).postDataJSON();
+  expect(config).toMatchObject({ chart_type: 'map', latitude_col: 'Mes', longitude_col: 'Valor', map_mode: 'circles', size_col: 'Valor', map_metric_cols: ['Mes'] });
+  await expect(page.getByText('No hay coordenadas válidas para los filtros seleccionados.')).toBeVisible();
 });

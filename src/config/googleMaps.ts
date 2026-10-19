@@ -7,6 +7,24 @@ export const DEFAULT_CENTER: google.maps.LatLngLiteral = {
 
 export const DEFAULT_ZOOM = 12;
 
+// Punto medio de la extensión provincial publicada por el IGN.
+export const FORMOSA_PROVINCE_CENTER: google.maps.LatLngLiteral = {
+  lat: -24.666481,
+  lng: -59.950844,
+};
+
+export const FORMOSA_PROVINCE_ZOOM = 7;
+
+export const FORMOSA_BOUNDARY_URL =
+  "https://ide.ign.gob.ar/geoservicios/rest/services/ANIDA/org_politica/MapServer/169/query" +
+  "?where=FNA%3D%27Formosa%27" +
+  "&outFields=FNA%2CIN1" +
+  "&returnGeometry=true" +
+  "&outSR=4326" +
+  "&maxAllowableOffset=0.002" +
+  "&geometryPrecision=6" +
+  "&f=geojson";
+
 export const MAP_OPTIONS: google.maps.MapOptions = {
   disableDefaultUI: false,
   zoomControl: true,

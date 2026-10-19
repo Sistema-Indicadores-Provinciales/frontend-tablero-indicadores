@@ -1,12 +1,14 @@
 import { Alert, Button } from '@mui/material';
-import { SectionWidgetRender, Widget } from 'types/Generator';
+import { ColumnAliases, SectionWidgetRender, Widget } from 'types/Generator';
+import { columnLabel } from 'utils/generatorConfig';
 import GeneratorChart from './GeneratorChart';
 
-export default function SavedChart({ widget, rendered, updating = false, onRetry }: {
+export default function SavedChart({ widget, rendered, updating = false, onRetry, aliases }: {
   widget: Widget;
   rendered?: SectionWidgetRender;
   updating?: boolean;
   onRetry?: () => void;
+  aliases?: ColumnAliases;
 }) {
   const result = rendered?.data;
   const isCounter = widget.config.chart_type === 'indicator';
@@ -16,8 +18,8 @@ export default function SavedChart({ widget, rendered, updating = false, onRetry
     <h2>{widget.title}</h2>
     {result ? <div className="generator-chart-content">
       {!isCounter && recordCount}
-      {!!result.ignored_filters?.length && <p className="generator-hint">Este gráfico no tiene los campos: {result.ignored_filters.join(', ')}. Se aplican los demás filtros.</p>}
-      {result.filtered_rows === 0 ? <Alert severity="info">No hay datos para los filtros seleccionados.</Alert> : <GeneratorChart widget={widget} result={result} showIndicatorTitle={!isCounter} />}
+      {!!result.ignored_filters?.length && <p className="generator-hint">Este gráfico no tiene los campos: {result.ignored_filters.map(column => columnLabel(column, aliases)).join(', ')}. Se aplican los demás filtros.</p>}
+      {result.filtered_rows === 0 ? <Alert severity="info">No hay datos para los filtros seleccionados.</Alert> : <GeneratorChart widget={widget} result={result} showIndicatorTitle={!isCounter} aliases={aliases} />}
       {isCounter && recordCount}
       {!!result.warnings.length && <details className="generator-hint"><summary>Notas sobre los datos</summary>{result.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</details>}
     </div> : rendered?.error ? <Alert severity="error" action={onRetry && <Button onClick={onRetry}>Reintentar</Button>}>{rendered.error}</Alert>
