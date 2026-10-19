@@ -14,7 +14,7 @@ const isFeatureCollection = (value: unknown): value is GeoJsonFeatureCollection 
   return candidate.type === "FeatureCollection" && Array.isArray(candidate.features);
 };
 
-/** Consulta una vez por sesión la geometría provincial publicada por el IGN. */
+/** Consulta una vez por sesión la geometría oficial de la provincia. */
 export const getFormosaBoundary = (): Promise<GeoJsonFeatureCollection> => {
   if (boundaryRequest) return boundaryRequest;
 
@@ -23,12 +23,12 @@ export const getFormosaBoundary = (): Promise<GeoJsonFeatureCollection> => {
   })
     .then(async response => {
       if (!response.ok) {
-        throw new Error(`El IGN respondió con estado ${response.status}.`);
+        throw new Error(`GeoRef respondió con estado ${response.status}.`);
       }
 
       const data: unknown = await response.json();
       if (!isFeatureCollection(data) || data.features.length === 0) {
-        throw new Error("El IGN no devolvió el límite provincial esperado.");
+        throw new Error("GeoRef no devolvió el límite provincial esperado.");
       }
 
       return data;
