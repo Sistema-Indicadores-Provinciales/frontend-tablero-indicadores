@@ -181,7 +181,7 @@ const Maps: React.FC<MapsProps> = ({
           })
           .catch(error => {
             if (mapRef.current !== map) return;
-            console.error("No se pudo cargar el límite oficial de Formosa desde GeoRef.", error);
+            console.error("No se pudo cargar el límite oficial de Formosa.", error);
             setBoundaryError("No se pudo cargar el contorno oficial de Formosa.");
           });
       } else if (fitBounds && markers.length > 0) {

@@ -15,13 +15,6 @@ export const FORMOSA_PROVINCE_CENTER: google.maps.LatLngLiteral = {
 
 export const FORMOSA_PROVINCE_ZOOM = 7;
 
-export const FORMOSA_BOUNDARY_URL =
-  "https://apis.datos.gob.ar/georef/api/v2.0/provincias" +
-  "?nombre=Formosa" +
-  "&formato=geojson" +
-  "&max=1" +
-  "&exacto=true";
-
 export const MAP_OPTIONS: google.maps.MapOptions = {
   disableDefaultUI: false,
   zoomControl: true,

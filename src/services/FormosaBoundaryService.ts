@@ -1,8 +1,14 @@
-import { FORMOSA_BOUNDARY_URL } from "config/googleMaps";
+import { analytics } from "config/Analytics";
+
+interface GeoJsonFeature {
+  geometry: {
+    type: "Polygon" | "MultiPolygon";
+  };
+}
 
 interface GeoJsonFeatureCollection {
   type: "FeatureCollection";
-  features: object[];
+  features: GeoJsonFeature[];
 }
 
 let boundaryRequest: Promise<GeoJsonFeatureCollection> | null = null;
@@ -11,27 +17,26 @@ const isFeatureCollection = (value: unknown): value is GeoJsonFeatureCollection 
   if (!value || typeof value !== "object") return false;
 
   const candidate = value as Partial<GeoJsonFeatureCollection>;
-  return candidate.type === "FeatureCollection" && Array.isArray(candidate.features);
+  return candidate.type === "FeatureCollection" && Array.isArray(candidate.features) &&
+    candidate.features.length > 0 && candidate.features.every(feature =>
+      feature?.geometry?.type === "Polygon" || feature?.geometry?.type === "MultiPolygon"
+    );
 };
 
-/** Consulta una vez por sesión la geometría oficial de la provincia. */
+/** Consulta una vez por sesión el límite validado y almacenado por analytics. */
 export const getFormosaBoundary = (): Promise<GeoJsonFeatureCollection> => {
   if (boundaryRequest) return boundaryRequest;
 
-  boundaryRequest = fetch(FORMOSA_BOUNDARY_URL, {
-    headers: { Accept: "application/geo+json, application/json" },
-  })
-    .then(async response => {
-      if (!response.ok) {
-        throw new Error(`GeoRef respondió con estado ${response.status}.`);
+  boundaryRequest = analytics
+    .get<unknown>("/v2/maps/formosa-boundary", {
+      headers: { Accept: "application/geo+json, application/json" },
+    })
+    .then(response => {
+      if (!isFeatureCollection(response.data)) {
+        throw new Error("El servidor no devolvió un polígono provincial válido.");
       }
 
-      const data: unknown = await response.json();
-      if (!isFeatureCollection(data) || data.features.length === 0) {
-        throw new Error("GeoRef no devolvió el límite provincial esperado.");
-      }
-
-      return data;
+      return response.data;
     })
     .catch(error => {
       // Una falla transitoria no debe quedar almacenada para los siguientes mapas.
