@@ -28,6 +28,9 @@ const quantile = (a: number[], p: number) => {
 const mapValue = (value: Scalar) => value == null ? 'Sin dato'
   : typeof value === 'number' ? value.toLocaleString('es-AR')
   : typeof value === 'boolean' ? value ? 'Sí' : 'No' : String(value);
+const chartNumber = (value: number | null) => value == null ? 'Sin dato'
+  : value.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+const chartPercent = (value: number) => `${value.toLocaleString('es-AR', { maximumFractionDigits: 2 })} %`;
 export default function GeneratorChart({ widget, result, showIndicatorTitle = true, aliases }: {
   widget: Widget; result: ChartData; showIndicatorTitle?: boolean; aliases?: ColumnAliases;
 }) {
@@ -81,6 +84,15 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     ? 'Registros'
     : renderedMetrics.size > 1 ? 'Valores' : columnLabel(widget.config.y_col, aliases);
   const pie = kind === 'pie' || kind === 'donut';
+  const pieLabelMode = widget.config.pie_label_mode || 'percent';
+  const pieValues = pie ? datasets[0].data : [];
+  const pieTotal = pieValues.reduce<number>((total, value) => total + (value || 0), 0);
+  const pieDetails = pieValues.map(value => ({
+    value: chartNumber(value),
+    percent: chartPercent(pieTotal && value != null ? value / pieTotal * 100 : 0),
+  }));
+  const pieInnerText = (index: number) => !pieValues[index] ? ''
+    : pieLabelMode === 'value' ? pieDetails[index].value : pieDetails[index].percent;
   if (widget.library === 'ECharts') {
     let series: any[] = datasets.map(s => ({
       id: `series:${s.label}`, name: s.label,
@@ -99,8 +111,16 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     let yAxis: any = { ...axisStyle, type: 'value', name: yLabel };
     if (kind === 'horizontal') [xAxis, yAxis] = [yAxis, xAxis];
     if (pie) {
-      series = [{ id: 'series:pie', type: 'pie', radius: kind === 'donut' ? ['40%', '65%'] : '65%',
-        universalTransition: true, data: labels.map((name, i) => ({ id: String(name), name: String(name), value: datasets[0].data[i] })) }];
+      const radius = kind === 'donut' ? ['40%', '65%'] : '65%';
+      const data = labels.map((name, i) => ({ id: String(name), name: String(name), value: pieValues[i] }));
+      series = [
+        { id: 'series:pie', type: 'pie', radius, universalTransition: true, data,
+          label: { show: true, position: 'outside', formatter: '{b}' }, labelLine: { show: true } },
+        { id: 'series:pie-values', type: 'pie', radius, silent: true, z: 3, animation: false, data,
+          tooltip: { show: false }, itemStyle: { color: 'transparent' }, labelLine: { show: false },
+          label: { show: true, position: 'inside', fontWeight: 700, fontSize: 12,
+            color: chartTheme.mode === 'dark' ? '#10243b' : '#ffffff', formatter: (params: any) => pieInnerText(params.dataIndex) } },
+      ];
       xAxis = yAxis = [];
     }
     if (kind === 'box') {
@@ -122,7 +142,9 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
       animationEasingUpdate: 'cubicOut',
       backgroundColor: chartTheme.paper,
       textStyle: { color: chartTheme.text, fontFamily: chartTheme.fontFamily },
-      tooltip: { trigger: pie || kind === 'scatter' || kind === 'heatmap' ? 'item' : 'axis', renderMode: 'richText', backgroundColor: chartTheme.tooltipBackground, borderColor: chartTheme.border, textStyle: { color: chartTheme.tooltipText } },
+      tooltip: { trigger: pie || kind === 'scatter' || kind === 'heatmap' ? 'item' : 'axis', renderMode: 'richText', backgroundColor: chartTheme.tooltipBackground, borderColor: chartTheme.border,
+        textStyle: { color: chartTheme.tooltipText, fontWeight: pie ? 700 : undefined },
+        formatter: pie ? (params: any) => `${params.marker}${params.name}: ${chartNumber(params.value)} (${chartPercent(params.percent)})` : undefined },
       legend: { type: 'scroll', bottom: 0, textStyle: { color: chartTheme.textSecondary } },
       grid: { left: 75, right: 35, top: 45, bottom: 85 },
       xAxis, yAxis, series,
@@ -137,7 +159,18 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     marker: { color: chartTheme.colors[i % chartTheme.colors.length] }, connectgaps: false,
   }));
   if (kind === 'horizontal') traces = traces.map(t => ({ ...t, x: t.y, y: t.x, orientation: 'h' }));
-  if (pie) traces = [{ type: 'pie', labels, values: datasets[0].data, hole: kind === 'donut' ? .45 : 0, marker: { colors: chartTheme.colors } }];
+  if (pie) {
+    const hole = kind === 'donut' ? .45 : 0;
+    const hovertext = labels.map((label, index) => `${label}: ${pieDetails[index].value} (${pieDetails[index].percent})`);
+    traces = [
+      { type: 'pie', labels, values: pieValues, hole, marker: { colors: chartTheme.colors }, sort: false,
+        textinfo: 'label', textposition: 'outside', hovertext, hovertemplate: '<b>%{hovertext}</b><extra></extra>' },
+      { type: 'pie', labels, values: pieValues, hole, marker: { colors: pieValues.map(() => 'rgba(0,0,0,0)'), line: { width: 0 } }, sort: false,
+        text: pieValues.map((_, index) => pieInnerText(index)), textinfo: 'text', textposition: 'inside',
+        textfont: { color: chartTheme.mode === 'dark' ? '#10243b' : '#ffffff', size: 12 }, hovertext,
+        hovertemplate: '<b>%{hovertext}</b><extra></extra>', showlegend: false },
+    ];
+  }
   if (kind === 'box') traces = datasets.map(s => {
     const a = s.data.filter((v): v is number => v !== null).sort((a, b) => a - b);
     return { type: 'box', name: s.label, q1: [quantile(a, .25)], median: [quantile(a, .5)], q3: [quantile(a, .75)], lowerfence: [a[0]], upperfence: [a[a.length - 1]], boxpoints: false };

@@ -8,7 +8,7 @@ import SaveDashboardDialog from 'components/analytics/SaveDashboardDialog';
 import { analytics, errorMessage } from 'config/Analytics';
 import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
-import { ChartData, ChartType, ColumnAliases, DestinationOption, FilterSorts, Preview, Publication, ReadConfig, SectionOptions, SortAggregation, SortConfig, Source, Widget, Workspace, chartNames } from 'types/Generator';
+import { ChartData, ChartType, ColumnAliases, DestinationOption, FilterSorts, PieLabelMode, Preview, Publication, ReadConfig, SectionOptions, SortAggregation, SortConfig, Source, Widget, Workspace, chartNames } from 'types/Generator';
 import GeneratorChart from 'components/analytics/GeneratorChart';
 import { suggestFilterColumns } from 'utils/sectionFilters';
 import { columnLabel, defaultSort, metricColumns } from 'utils/generatorConfig';
@@ -17,7 +17,7 @@ import './chart-generator.css';
 const initialRead: ReadConfig = { sheet: '', header_row: 1, decimal: ',', types: {} };
 function newWidget(): Widget {
   return { id: crypto.randomUUID(), title: 'Mi gráfico', width: 12, library: 'Plotly', config: {
-    ...initialRead, chart_type: 'bar', aggregation: 'count', x_col: '', y_col: '', y_cols: [], group_col: '', date_bucket: 'none', filters: {},
+    ...initialRead, chart_type: 'bar', aggregation: 'count', x_col: '', y_col: '', y_cols: [], pie_label_mode: 'percent', group_col: '', date_bucket: 'none', filters: {},
     latitude_col: '', longitude_col: '', label_col: '', size_col: '', map_mode: 'markers', map_metric_cols: [],
   } };
 }
@@ -430,6 +430,10 @@ export default function ChartGenerator() {
                 if (next) patchWidget(w.id, { config: { ...w.config, y_cols: [...(w.config.y_cols || []), next] } });
               }}><Icon icon="material-symbols:add-rounded" width={20} /> Agregar métrica</button>
             <label>Operación<select disabled={['scatter', 'box', 'histogram', 'table'].includes(w.config.chart_type)} value={w.config.aggregation} onChange={e => patchWidget(w.id, { config: { ...w.config, aggregation: e.target.value } })}>{Object.entries(operations).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+            {['pie', 'donut'].includes(w.config.chart_type) && <label>Valor dentro de cada porción<select value={w.config.pie_label_mode || 'percent'}
+              onChange={e => patchWidget(w.id, { config: { ...w.config, pie_label_mode: e.target.value as PieLabelMode } })}>
+              <option value="percent">Porcentaje del total</option><option value="value">Valor nominal</option>
+            </select></label>}
             <label>Separar series<select value={w.config.group_col} onChange={e => patchWidget(w.id, { config: { ...w.config, group_col: e.target.value } })}><option value="">Sin separar</option>{preview.columns.map(c => <option key={c} value={c}>{columnLabel(c, columnAliases)}</option>)}</select></label>
             <label>Agrupar fechas<select value={w.config.date_bucket} onChange={e => patchWidget(w.id, { config: { ...w.config, date_bucket: e.target.value } })}><option value="none">Sin agrupar</option><option value="month">Por mes</option><option value="year">Por año</option></select></label>
           </>}

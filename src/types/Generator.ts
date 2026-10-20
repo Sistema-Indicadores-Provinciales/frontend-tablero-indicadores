@@ -7,6 +7,7 @@ export type ChartType = keyof typeof chartNames;
 export type Scalar = string | number | boolean | null;
 export type SortAggregation = 'alphabetical' | 'sum' | 'max' | 'min' | 'count' | 'distinct';
 export type SortDirection = 'asc' | 'desc';
+export type PieLabelMode = 'percent' | 'value';
 export interface SortConfig { field: string; aggregation: SortAggregation; direction: SortDirection; }
 export type ColumnAliases = Record<string, string>;
 export type FilterSorts = Record<string, SortConfig>;
@@ -15,6 +16,7 @@ export interface ReadConfig { sheet: string; header_row: number; decimal: string
 export interface ChartConfig extends ReadConfig {
   chart_type: ChartType; aggregation: string; x_col: string; y_col: string; group_col: string;
   y_cols?: string[];
+  pie_label_mode?: PieLabelMode;
   date_bucket: string; filters: Record<string, string[]>;
   category_sort?: SortConfig; series_sort?: SortConfig;
   latitude_col?: string; longitude_col?: string; label_col?: string; size_col?: string; map_mode?: 'markers' | 'circles';

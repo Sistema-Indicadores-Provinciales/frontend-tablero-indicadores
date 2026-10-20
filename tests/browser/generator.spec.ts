@@ -97,6 +97,33 @@ test('allows additional metrics on compatible charts', async ({ page }) => {
   await expect(addMetric).toBeEnabled();
 });
 
+test('pie charts keep category labels outside and values inside each slice', async ({ page }) => {
+  await page.getByRole('combobox', { name: 'Tipo de gráfico', exact: true }).selectOption('pie');
+  const labelMode = page.getByRole('combobox', { name: 'Valor dentro de cada porción', exact: true });
+  await expect(labelMode).toHaveValue('percent');
+
+  let request = page.waitForRequest(r => r.url().endsWith('/v2/sources/test-source/chart'));
+  await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ chart_type: 'pie', pie_label_mode: 'percent' });
+  await expect(page.locator('.pielayer')).toContainText('66,67 %');
+  await expect(page.locator('.pielayer')).toContainText('2');
+
+  await page.locator('.pielayer .trace').last().locator('.slice path').nth(1).hover();
+  await expect(page.locator('.hoverlayer')).toContainText('2: 10 (66,67 %)');
+  await expect(page.locator('.hoverlayer tspan').filter({ hasText: '2: 10 (66,67 %)' })).toHaveCSS('font-weight', '700');
+
+  await labelMode.selectOption('value');
+  request = page.waitForRequest(r => r.url().endsWith('/v2/sources/test-source/chart'));
+  await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ chart_type: 'pie', pie_label_mode: 'value' });
+  await expect(page.locator('.pielayer')).toContainText('10');
+
+  await labelMode.selectOption('percent');
+  await page.getByRole('combobox', { name: 'Presentación', exact: true }).selectOption('ECharts');
+  await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  await expect(page.locator('.generator-widget canvas')).toBeVisible();
+});
+
 test('shows an API error without displaying a stale chart', async ({ page }) => {
   await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
   await expect(page.locator('.js-plotly-plot')).toBeVisible();
