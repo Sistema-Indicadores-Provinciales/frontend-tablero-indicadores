@@ -11,6 +11,9 @@ export type PieLabelMode = 'percent' | 'value';
 export interface SortConfig { field: string; aggregation: SortAggregation; direction: SortDirection; }
 export type ColumnAliases = Record<string, string>;
 export type FilterSorts = Record<string, SortConfig>;
+export type FilterSelectionMode = 'multiple' | 'single';
+export interface SectionFilterConfig { selection_mode: FilterSelectionMode; default_value?: string; }
+export type SectionFilterConfigs = Record<string, SectionFilterConfig>;
 export interface Source { _id: string; name: string; kind: 'upload' | 'system' | 'google'; sheets?: string[]; }
 export interface ReadConfig { sheet: string; header_row: number; decimal: string; types: Record<string, string>; }
 export interface ChartConfig extends ReadConfig {
@@ -42,7 +45,7 @@ export type ChartFilterOptions = {
 export interface Widget { id: string; title: string; width: number; library: 'Plotly' | 'ECharts'; config: ChartConfig; }
 export interface SectionDestination { dashboardId: string; sectionId: string; }
 export interface DestinationOption extends SectionDestination { dashboardName: string; sectionName: string; path: string; }
-export interface Workspace { _id: string; name: string; source_id: string; widgets: Widget[]; destination?: SectionDestination; filter_columns?: string[]; column_aliases?: ColumnAliases; filter_sorts?: FilterSorts; }
+export interface Workspace { _id: string; name: string; source_id: string; widgets: Widget[]; destination?: SectionDestination; filter_columns?: string[]; column_aliases?: ColumnAliases; filter_sorts?: FilterSorts; filter_settings?: SectionFilterConfigs; }
 export interface WorkspaceView extends Workspace { can_edit: boolean; source_kind: Source['kind']; source_access_mode?: 'public'; }
 export interface SectionWidgetRender { data?: ChartData; error?: string; }
 export interface SectionRenderResponse {

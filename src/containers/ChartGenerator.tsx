@@ -2,15 +2,15 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '@iconify/react';
 import { isAxiosError } from 'axios';
-import { Autocomplete, Button, Checkbox, TextField } from '@mui/material';
+import { Autocomplete, Box, Button, Checkbox, Collapse, Switch, TextField, Typography } from '@mui/material';
 import { AuthContext } from 'contexts/AuthContext';
 import SaveDashboardDialog from 'components/analytics/SaveDashboardDialog';
 import { analytics, errorMessage } from 'config/Analytics';
 import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
-import { ChartData, ChartType, ColumnAliases, DestinationOption, FilterSorts, PieLabelMode, Preview, Publication, ReadConfig, SectionOptions, SortAggregation, SortConfig, Source, Widget, Workspace, chartNames } from 'types/Generator';
+import { ChartData, ChartType, ColumnAliases, DestinationOption, FilterSelectionMode, FilterSorts, PieLabelMode, Preview, Publication, ReadConfig, SectionFilterConfig, SectionFilterConfigs, SectionOptions, SortAggregation, SortConfig, Source, Widget, Workspace, chartNames } from 'types/Generator';
 import GeneratorChart from 'components/analytics/GeneratorChart';
-import { suggestFilterColumns } from 'utils/sectionFilters';
+import { sortFilterValues, suggestFilterColumns } from 'utils/sectionFilters';
 import { columnLabel, defaultSort, metricColumns } from 'utils/generatorConfig';
 import './chart-generator.css';
 
@@ -50,6 +50,42 @@ function SortControls({ title, columns, aliases, value, fallbackField, onChange 
   </div></fieldset>;
 }
 
+function FilterSettingsControls({ displayName, options, value, onChange }: {
+  displayName: string; options: string[]; value?: SectionFilterConfig;
+  onChange: (value: SectionFilterConfig) => void;
+}) {
+  const [defaultOpen, setDefaultOpen] = useState(false);
+  const selectionMode = value?.selection_mode || 'multiple';
+  const defaultValue = value?.default_value || '';
+  const single = selectionMode === 'single';
+  const patch = (change: Partial<SectionFilterConfig>) => onChange({ selection_mode: selectionMode, ...value, ...change });
+  return <fieldset className="generator-filter-setting"><legend>{displayName}</legend>
+    <Box className="generator-filter-setting-actions">
+      <Box className="generator-filter-mode">
+        <Typography component="span" fontSize={12} color={single ? 'text.secondary' : 'text.primary'}>Múltiple</Typography>
+        <Switch size="small" checked={single} inputProps={{ 'aria-label': `Tipo de selección de ${displayName}` }}
+          onChange={(_, checked) => {
+            patch({ selection_mode: (checked ? 'single' : 'multiple') as FilterSelectionMode });
+            if (checked && !defaultValue) setDefaultOpen(true);
+          }} />
+        <Typography component="span" fontSize={12} color={single ? 'text.primary' : 'text.secondary'}>Individual</Typography>
+      </Box>
+      <Button size="small" variant="outlined" aria-label={`Configurar valor predeterminado de ${displayName}`}
+        aria-expanded={defaultOpen} onClick={() => setDefaultOpen(open => !open)}>
+        <Icon icon="material-symbols:tune-rounded" width={17} />
+        {defaultValue ? `Predeterminado: ${defaultValue}` : 'Valor predeterminado'}
+      </Button>
+    </Box>
+    <Collapse in={defaultOpen} unmountOnExit>
+      <Autocomplete freeSolo size="small" options={options} value={defaultValue || null}
+        onChange={(_, next) => patch({ default_value: next || undefined })}
+        renderInput={params => <TextField {...params} required={single} error={single && !defaultValue}
+          label={`Valor predeterminado de ${displayName}`} placeholder="Buscar un valor"
+          helperText={single && !defaultValue ? 'Obligatorio para la selección individual.' : 'Buscá una opción o escribí el valor exacto.'} />} />
+    </Collapse>
+  </fieldset>;
+}
+
 function mapColumnDefaults(preview: Preview) {
   const normalized = (column: string) => labelKey(column).replace(/[^a-z0-9]/g, '');
   const numeric = preview.columns.filter(column => preview.column_meta[column].type === 'number');
@@ -85,6 +121,7 @@ export default function ChartGenerator() {
   const [filterColumns, setFilterColumns] = useState<string[] | null>(null);
   const [columnAliases, setColumnAliases] = useState<ColumnAliases>({});
   const [filterSorts, setFilterSorts] = useState<FilterSorts>({});
+  const [filterSettings, setFilterSettings] = useState<SectionFilterConfigs>({});
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState('');
@@ -102,6 +139,8 @@ export default function ChartGenerator() {
     type: preview.column_meta[column].type, total: preview.column_meta[column].unique_count, values: [],
   }]))) : [];
   const visibleFilterColumns = (filterColumns ?? suggestedColumns).filter(column => preview?.columns.includes(column));
+  const missingSingleDefaults = visibleFilterColumns.filter(column =>
+    filterSettings[column]?.selection_mode === 'single' && !filterSettings[column]?.default_value);
   const visibleLabels = preview?.columns.map(column => columnLabel(column, columnAliases)) || [];
   const aliasConflict = new Set(visibleLabels.map(labelKey)).size !== visibleLabels.length;
   const headers = googleToken ? { 'X-Google-Access-Token': googleToken } : {};
@@ -145,7 +184,7 @@ export default function ChartGenerator() {
     if (!dashboardId && !sectionId) {
       setTargetLoading(false);
       if (loadedEdit.current) {
-        loadedEdit.current = ''; setWorkspaceId(''); setPublication(null); setSourceId(''); setRead(initialRead); setFilters({}); setFilterColumns(null); setColumnAliases({}); setFilterSorts({}); setWidgets([newWidget()]); setName('Mi tablero'); invalidate();
+        loadedEdit.current = ''; setWorkspaceId(''); setPublication(null); setSourceId(''); setRead(initialRead); setFilters({}); setFilterColumns(null); setColumnAliases({}); setFilterSorts({}); setFilterSettings({}); setWidgets([newWidget()]); setName('Mi tablero'); invalidate();
       }
       return;
     }
@@ -202,11 +241,11 @@ export default function ChartGenerator() {
   }, [sourceId, sourceReady, sheets, read, googleToken, googleConnectionVersion]);
   const selectSource = (id: string) => {
     invalidate(); setPublication(null); setSourceId(id);
-    if (!(workspaceId && sourceMissing)) { setRead(initialRead); setFilters({}); setColumnAliases({}); setFilterSorts({}); }
+    if (!(workspaceId && sourceMissing)) { setRead(initialRead); setFilters({}); setColumnAliases({}); setFilterSorts({}); setFilterSettings({}); }
     if (!workspaceId) { setWidgets([newWidget()]); setFilterColumns(null); }
     setError('');
   };
-  const changeRead = (patch: Partial<ReadConfig>) => { invalidate(); setRead(prev => ({ ...prev, ...patch })); setFilters({}); };
+  const changeRead = (patch: Partial<ReadConfig>) => { invalidate(); setRead(prev => ({ ...prev, ...patch })); setFilters({}); setFilterSettings({}); };
   const patchWidget = (id: string, patch: Partial<Widget>) => {
     requests.current[id]?.abort();
     setResults(prev => { const next = { ...prev }; delete next[id]; return next; });
@@ -246,13 +285,19 @@ export default function ChartGenerator() {
     let contentSaved = false;
     try {
       if (aliasConflict) throw new Error('Cada columna debe tener un nombre visible diferente.');
+      if (missingSingleDefaults.length) throw new Error('Elegí un valor predeterminado para cada filtro de selección individual.');
       const target = selectedDestination || destination;
       const savedAliases = Object.fromEntries((preview?.columns || []).flatMap(column => {
         const alias = columnAliases[column]?.trim();
         return alias && alias !== column ? [[column, alias]] : [];
       }));
       const savedFilterSorts = Object.fromEntries(visibleFilterColumns.map(column => [column, filterSorts[column] || defaultSort(column)]));
-      const body = { name: savedName, source_id: sourceId, filter_columns: visibleFilterColumns, column_aliases: savedAliases, filter_sorts: savedFilterSorts,
+      const savedFilterSettings = Object.fromEntries(visibleFilterColumns.map(column => {
+        const setting = filterSettings[column];
+        return [column, { selection_mode: setting?.selection_mode || 'multiple',
+          ...(setting?.default_value ? { default_value: setting.default_value } : {}) }];
+      }));
+      const body = { name: savedName, source_id: sourceId, filter_columns: visibleFilterColumns, column_aliases: savedAliases, filter_sorts: savedFilterSorts, filter_settings: savedFilterSettings,
         widgets: widgets.map(w => ({ ...w, config: { ...w.config, ...read, filters } })),
         ...(target ? { destination: { dashboardId: target.dashboardId, sectionId: target.sectionId } } : {}) };
       const { data } = workspaceId ? await analytics.put<Workspace>(`/v2/workspaces/${workspaceId}`, body) : await analytics.post<Workspace>('/v2/workspaces', body);
@@ -286,7 +331,7 @@ export default function ChartGenerator() {
       invalidate(); setPublication(null); setSourceId(saved.source_id); setName(saved.name); setWorkspaceId(editId); setWidgets(saved.widgets);
       const cfg = saved.widgets[0]?.config;
       setRead(cfg ? { sheet: cfg.sheet, header_row: cfg.header_row, decimal: cfg.decimal, types: cfg.types } : initialRead);
-      setFilters(cfg?.filters || {}); setFilterColumns(saved.filter_columns ?? null); setColumnAliases(saved.column_aliases || {}); setFilterSorts(saved.filter_sorts || {}); setNotice('Estás editando gráficos guardados. Usá Agregar gráfico para sumar otro; al guardar se conservarán los demás.');
+      setFilters(cfg?.filters || {}); setFilterColumns(saved.filter_columns ?? null); setColumnAliases(saved.column_aliases || {}); setFilterSorts(saved.filter_sorts || {}); setFilterSettings(saved.filter_settings || {}); setNotice('Estás editando gráficos guardados. Usá Agregar gráfico para sumar otro; al guardar se conservarán los demás.');
     }).catch(e => { if (!controller.signal.aborted) setTargetError(errorMessage(e)); })
       .finally(() => { if (!controller.signal.aborted) setTargetLoading(false); });
     return () => controller.abort();
@@ -353,6 +398,16 @@ export default function ChartGenerator() {
           renderInput={params => <TextField {...params} label="Campos para filtrar la sección" placeholder="Elegir campos" helperText="Hasta 20 campos. Si no elegís ninguno, la sección se mostrará sin filtros." />} />
         <Button size="small" onClick={() => setFilterColumns(suggestedColumns)}>Sugerir filtros</Button>
         <Button size="small" onClick={() => setFilterColumns([])}>Quitar todos</Button>
+        {!!visibleFilterColumns.length && <section className="generator-filter-settings">
+          <h3>Comportamiento de los filtros</h3>
+          <p className="generator-hint">Definí si cada filtro permite una o varias opciones y, si corresponde, con qué valor se abrirá la sección.</p>
+          <div className="generator-filter-settings-grid">{visibleFilterColumns.map(column => <FilterSettingsControls key={column}
+            displayName={columnLabel(column, columnAliases)}
+            options={sortFilterValues(column, preview.column_meta[column].unique_values.map(value => String(value)))}
+            value={filterSettings[column]}
+            onChange={setting => setFilterSettings(previous => ({ ...previous, [column]: setting }))} />)}</div>
+          {!!missingSingleDefaults.length && <p role="alert" className="generator-error">Elegí un valor predeterminado para: {missingSingleDefaults.map(column => columnLabel(column, columnAliases)).join(', ')}.</p>}
+        </section>}
         {!!visibleFilterColumns.length && <details className="generator-restrictions" open><summary>Orden de los valores de los filtros</summary>
           <p className="generator-hint">Cada filtro puede ordenarse usando cualquier campo de los datos y la operación elegida.</p>
           <div className="generator-filter-sorts">{visibleFilterColumns.map(column => <SortControls key={column}
@@ -367,7 +422,7 @@ export default function ChartGenerator() {
       </div></details></section>
       <section className="generator-controls generator-panel">
         {destination ? <strong>{destination.dashboardName} → {destination.sectionName}</strong> : <label>Nombre del tablero<input value={name} maxLength={200} onChange={e => setName(e.target.value)} /></label>}
-        <button disabled={busy || targetLoading || !!targetError || !name.trim() || !widgets.length || aliasConflict} className="generator-primary" onClick={() => { setSaveError(''); setSaveOpen(true); }}>{destination ? 'Guardar en esta sección' : 'Guardar tablero'}</button>
+        <button disabled={busy || targetLoading || !!targetError || !name.trim() || !widgets.length || aliasConflict || !!missingSingleDefaults.length} className="generator-primary" onClick={() => { setSaveError(''); setSaveOpen(true); }}>{destination ? 'Guardar en esta sección' : 'Guardar tablero'}</button>
         <button disabled={busy} onClick={() => { setWorkspaceId(''); setPublication(null); setDestination(null); setTargetError(''); setSearchParams({}, { replace: true }); loadedEdit.current = ''; setName(name + ' (copia)'); setNotice('Se guardará una copia. Al guardar podés elegir otra sección vacía o crear un tablero nuevo.'); }}>Guardar como nuevo</button>
         <button disabled={widgets.length >= 30} onClick={() => {
           const widget = newWidget(), mapDefaults = mapColumnDefaults(preview);

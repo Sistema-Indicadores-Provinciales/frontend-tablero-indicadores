@@ -5,7 +5,7 @@ import { isAxiosError } from 'axios';
 import { analytics, errorMessage } from 'config/Analytics';
 import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
-import { FilterOptions, SectionFilters, SectionRenderResponse, SectionWidgetRender, Widget, WorkspaceView } from 'types/Generator';
+import { FilterOptions, SectionFilterConfigs, SectionFilters, SectionRenderResponse, SectionWidgetRender, Widget, WorkspaceView } from 'types/Generator';
 import SavedChart from 'components/analytics/SavedChart';
 import SectionFilterBar from 'components/analytics/SectionFilterBar';
 import { suggestFilterColumns } from 'utils/sectionFilters';
@@ -27,6 +27,11 @@ function catalogFrom(options: FilterOptions): FilterOptions {
   return Object.fromEntries(Object.entries(options).map(([column, option]) => [column, {
     values: [], type: option.type, total: option.unfiltered_total ?? option.total,
   }]));
+}
+
+function defaultFilters(settings: SectionFilterConfigs = {}): SectionFilters {
+  return Object.fromEntries(Object.entries(settings).flatMap(([column, setting]) =>
+    setting.default_value ? [[column, { mode: 'include' as const, values: [setting.default_value] }]] : []));
 }
 
 function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: Props) {
@@ -111,7 +116,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     setWorkspace(null); setResults({}); setFilterOptions({}); setCatalog({}); setFilters({});
     setViewLoading(true); setRendering(false); setRefreshing(false); setError(''); setSnapshotExpired(false);
     analytics.get<WorkspaceView>(`/v2/workspaces/${encodeURIComponent(workspaceId)}/view`, { signal: controller.signal })
-      .then(({ data }) => { if (!controller.signal.aborted) setWorkspace(data); })
+      .then(({ data }) => { if (!controller.signal.aborted) { setFilters(defaultFilters(data.filter_settings)); setWorkspace(data); } })
       .catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); })
       .finally(() => { if (!controller.signal.aborted) setViewLoading(false); });
     return () => controller.abort();
@@ -152,7 +157,8 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     {workspace?.source_kind === 'google' && (workspace.source_access_mode === 'public'
       ? <p className="generator-hint">Google Sheets · Los datos se leen al entrar o al usar Actualizar datos.</p>
       : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={handleConnectionChange} busy={busy} />)}
-    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} aliases={workspace.column_aliases} />}
+    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters}
+      aliases={workspace.column_aliases} settings={workspace.filter_settings} />}
     {counters.length > 0 && <section className="generator-counters" aria-label="Contadores de la sección">{counters.map(renderWidget)}</section>}
     {charts.length > 0 && <div className="generator-grid">{charts.map(renderWidget)}</div>}
   </main>;

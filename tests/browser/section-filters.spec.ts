@@ -257,6 +257,69 @@ test('author chooses the visible fields in the generator and changes persist on 
   await expect(page.getByRole('region', { name: 'Filtros de la sección' })).toHaveCount(0);
 });
 
+test('author configures searchable defaults and requires one for single selection', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/generador?editar=saved');
+  const mode = page.getByLabel('Tipo de selección de Año');
+  await expect(mode).toBeVisible({ timeout: 60000 });
+  await expect(mode).not.toBeChecked();
+  await mode.check();
+  await expect(page.getByRole('alert')).toContainText('Elegí un valor predeterminado para: Año');
+  await expect(page.getByRole('button', { name: 'Guardar tablero', exact: true })).toBeDisabled();
+
+  const defaultValue = page.getByRole('combobox', { name: 'Valor predeterminado de Año', exact: true });
+  await defaultValue.fill('202');
+  await page.getByRole('listbox').getByRole('option', { name: '2026', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Guardar tablero', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
+  await expect.poll(() => state.saves.length).toBe(1);
+  expect(state.saves[0].filter_settings).toEqual({
+    'Año': { selection_mode: 'single', default_value: '2026' },
+    Mes: { selection_mode: 'multiple' },
+  });
+
+  await page.reload();
+  const reloadedMode = page.getByLabel('Tipo de selección de Año');
+  await expect(reloadedMode).toBeChecked({ timeout: 60000 });
+  await expect(page.getByRole('button', { name: 'Configurar valor predeterminado de Año' })).toContainText('2026');
+  await reloadedMode.uncheck();
+  await expect(reloadedMode).not.toBeChecked();
+  await reloadedMode.check();
+  await expect(reloadedMode).toBeChecked();
+});
+
+test('section applies defaults once and single-choice filters replace their selection', async ({ page }) => {
+  const state = await setup(page);
+  state.workspace.filter_settings = {
+    'Año': { selection_mode: 'single', default_value: '2026' },
+    Mes: { selection_mode: 'multiple', default_value: 'Enero' },
+  };
+  await page.goto('/educacion/intervenciones');
+  await expect(page.locator('.generator-indicator strong')).toHaveText(['10', '10', '10', '7'], { timeout: 60000 });
+  expect(state.requests.filter(request => request.id === '0').at(-1)?.filters).toEqual({ 'Año': ['2026'], Mes: ['Enero'] });
+
+  await page.getByRole('button', { name: 'Filtrar por Año', exact: true }).click();
+  const year = page.getByRole('dialog', { name: 'Filtrar por Año', exact: true });
+  await expect(year.getByRole('checkbox', { name: 'Todos', exact: true })).toBeDisabled();
+  await expect(year.getByRole('checkbox', { name: 'Todos', exact: true })).not.toBeChecked();
+  await expect(year.getByRole('radio', { name: '2026', exact: true })).toBeChecked();
+  await expect(year.getByRole('button', { name: /^Solamente/ })).toHaveCount(0);
+  await year.getByRole('radio', { name: '2025', exact: true }).check();
+  await year.getByRole('textbox').press('Escape');
+  await expect.poll(() => state.requests.filter(request => request.id === '0').at(-1)?.filters).toEqual({ 'Año': ['2025'], Mes: ['Enero'] });
+
+  await page.getByRole('button', { name: 'Filtrar por Mes', exact: true }).click();
+  const month = page.getByRole('dialog', { name: 'Filtrar por Mes', exact: true });
+  await expect(month.getByRole('checkbox', { name: 'Enero', exact: true })).toBeChecked();
+  await month.getByRole('checkbox', { name: 'Febrero', exact: true }).check();
+  await month.getByRole('textbox').press('Escape');
+  await expect.poll(() => state.requests.filter(request => request.id === '0').at(-1)?.filters).toEqual({ 'Año': ['2025'], Mes: ['Enero', 'Febrero'] });
+
+  await page.getByRole('button', { name: 'Limpiar filtros' }).click();
+  await expect.poll(() => state.requests.filter(request => request.id === '0').at(-1)?.filters).toEqual({});
+});
+
 test('column aliases and field-based ordering persist in the saved section', async ({ page }) => {
   const state = await setup(page);
   await page.goto('/generador?editar=saved');

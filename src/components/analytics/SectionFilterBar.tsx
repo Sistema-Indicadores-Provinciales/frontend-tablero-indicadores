@@ -1,23 +1,24 @@
 import { useId, useState } from 'react';
-import { Box, Button, Checkbox, Divider, FormControlLabel, InputAdornment, Popover, TextField, Typography } from '@mui/material';
+import { Box, Button, Checkbox, Divider, FormControlLabel, InputAdornment, Popover, Radio, TextField, Typography } from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import SearchIcon from '@mui/icons-material/Search';
-import { ColumnAliases, FilterOptions, SectionFilterSelection, SectionFilters } from 'types/Generator';
+import { ColumnAliases, FilterOptions, SectionFilterConfig, SectionFilterConfigs, SectionFilterSelection, SectionFilters } from 'types/Generator';
 import { sortFilterValues } from 'utils/sectionFilters';
 import { columnLabel } from 'utils/generatorConfig';
 
 const searchable = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 
-function FilterControl({ column, displayName, options, selection, loading, onChange }: {
-  column: string; displayName: string; options?: FilterOptions[string]; selection?: SectionFilterSelection; loading: boolean;
+function FilterControl({ column, displayName, options, selection, setting, loading, onChange }: {
+  column: string; displayName: string; options?: FilterOptions[string]; selection?: SectionFilterSelection; setting?: SectionFilterConfig; loading: boolean;
   onChange: (selection?: SectionFilterSelection) => void;
 }) {
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [search, setSearch] = useState('');
   const [pendingAll, setPendingAll] = useState(false);
-  const selectedValues = selection?.values || [];
-  const mode = selectedValues.length ? selection?.mode : undefined;
+  const single = setting?.selection_mode === 'single';
+  const selectedValues = single ? (selection?.values || []).slice(0, 1) : selection?.values || [];
+  const mode = selectedValues.length ? (single ? 'include' : selection?.mode) : undefined;
   const close = () => { setAnchor(null); setSearch(''); setPendingAll(false); };
   const availableSelected = options?.available_selected ?? selectedValues.filter(value =>
     options?.values.includes(value) || (options?.total || 0) > (options?.values.length || 0));
@@ -29,12 +30,17 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
   const shown = all.filter(value => searchable(value).includes(searchable(search)));
   const custom = search.trim();
   const canAddCustom = !loading && !!options && options.total > options.values.length;
-  const canUseCustom = canAddCustom && (!mode || mode === 'include' || selectedValues.includes(custom));
-  const allSelected = !mode || (mode === 'include' && !!options && options.total > 0 &&
+  const canUseCustom = canAddCustom && (single || !mode || mode === 'include' || selectedValues.includes(custom));
+  const allSelected = single ? !mode : !mode || (mode === 'include' && !!options && options.total > 0 &&
     options.total <= options.values.length && options.values.every(value => selectedValues.includes(value)));
   const active = !!mode;
 
   const toggleValue = (value: string) => {
+    if (single) {
+      onChange({ mode: 'include', values: [value] });
+      setPendingAll(false);
+      return;
+    }
     if (pendingAll) {
       onChange({ mode: 'include', values: [value] });
       setPendingAll(false);
@@ -72,7 +78,7 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
 
   const addCustom = () => {
     if (!canAddCustom || !custom) return;
-    if (!mode || pendingAll) onChange({ mode: 'include', values: [custom] });
+    if (single || !mode || pendingAll) onChange({ mode: 'include', values: [custom] });
     else if (mode === 'include' && !selectedValues.includes(custom) && selectedValues.length < 100) {
       onChange({ mode: 'include', values: [...selectedValues, custom] });
     } else if (mode === 'exclude' && selectedValues.includes(custom)) removeValue(custom);
@@ -109,8 +115,8 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
           inputProps={{ 'aria-label': `Buscar en ${displayName}`, maxLength: 2000 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <FormControlLabel control={<Checkbox size="small" checked={pendingAll ? false : allSelected}
-            indeterminate={!pendingAll && active && !allSelected} onChange={() => {
+          <FormControlLabel control={<Checkbox size="small" checked={single ? false : pendingAll ? false : allSelected}
+            indeterminate={!single && !pendingAll && active && !allSelected} disabled={single || loading} onChange={() => {
               if (pendingAll) { onChange(); setPendingAll(false); }
               else if (allSelected) setPendingAll(true);
               else { onChange(); setPendingAll(false); }
@@ -128,15 +134,17 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
           const adding = pendingAll || !mode || !selectedValues.includes(value);
           return <Box component="li" key={value} sx={{ display: 'flex', alignItems: 'center', px: 1, '&:hover': { bgcolor: 'action.hover' } }}>
             <FormControlLabel sx={{ m: 0, flex: 1, minWidth: 0, '.MuiFormControlLabel-label': { minWidth: 0 } }}
-              control={<Checkbox size="small" checked={checked}
-                disabled={loading || (adding && !pendingAll && !!mode && selectedValues.length >= 100)}
-                onChange={() => toggleValue(value)} />}
+              control={single
+                ? <Radio size="small" checked={selectedValues.includes(value)} disabled={loading} onChange={() => toggleValue(value)} />
+                : <Checkbox size="small" checked={checked}
+                    disabled={loading || (adding && !pendingAll && !!mode && selectedValues.length >= 100)}
+                    onChange={() => toggleValue(value)} />}
               label={<Box><Typography fontSize={12} noWrap title={value}>{value || '(Vacío)'}</Typography>
                 {unavailable.includes(value) && <Typography component="span" fontSize={11} color="text.secondary">Sin datos con los otros filtros</Typography>}</Box>} />
             {unavailable.includes(value)
               ? <Button size="small" aria-label={`Quitar ${value || '(Vacío)'}`} sx={{ fontSize: 10, minWidth: 66, ml: .5 }}
                   onClick={() => removeValue(value)}>Quitar</Button>
-              : <Button size="small" disabled={loading || !options} aria-label={`Solamente ${value || '(Vacío)'}`} sx={{ fontSize: 10, minWidth: 66, ml: .5 }}
+              : !single && <Button size="small" disabled={loading || !options} aria-label={`Solamente ${value || '(Vacío)'}`} sx={{ fontSize: 10, minWidth: 66, ml: .5 }}
                   onClick={() => { onChange({ mode: 'include', values: [value] }); close(); }}>Solamente</Button>}
           </Box>;
         })}
@@ -152,8 +160,8 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
   </>;
 }
 
-export default function SectionFilterBar({ columns, options, values, loading, onChange, aliases }: {
-  columns: string[]; options: FilterOptions; values: SectionFilters; loading: boolean; aliases?: ColumnAliases; onChange: (values: SectionFilters) => void;
+export default function SectionFilterBar({ columns, options, values, loading, onChange, aliases, settings }: {
+  columns: string[]; options: FilterOptions; values: SectionFilters; loading: boolean; aliases?: ColumnAliases; settings?: SectionFilterConfigs; onChange: (values: SectionFilters) => void;
 }) {
   const update = (column: string, selection?: SectionFilterSelection) => {
     const next = { ...values };
@@ -163,7 +171,7 @@ export default function SectionFilterBar({ columns, options, values, loading, on
   };
   return <Box component="section" aria-label="Filtros de la sección" className="section-filter-bar">
     <div className="section-filter-controls">
-      {columns.map(column => <FilterControl key={column} column={column} displayName={columnLabel(column, aliases)} options={options[column]} selection={values[column]} loading={loading}
+      {columns.map(column => <FilterControl key={column} column={column} displayName={columnLabel(column, aliases)} options={options[column]} selection={values[column]} setting={settings?.[column]} loading={loading}
         onChange={selection => update(column, selection)} />)}
     </div>
     <Button className="section-filter-clear" size="small" variant="contained" onClick={() => onChange({})}>Limpiar filtros</Button>

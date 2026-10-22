@@ -4,7 +4,7 @@
 .generator-panel { background: var(--app-paper); border: 1px solid var(--app-border); border-radius: 12px; padding: 20px; margin: 18px 0; min-width: 0; }
 .generator-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
 .generator label:not(.MuiFormLabel-root) { display: flex; flex-direction: column; gap: 6px; font-size: 13px; flex: 1 1 170px; max-width: 380px; }
-.generator input:not(.MuiInputBase-input), .generator select, .generator button:not(.MuiButtonBase-root) { font: inherit; padding: 9px 11px; border: 1px solid var(--app-control-border); border-radius: 6px; min-height: 39px; background: var(--app-paper); color: var(--app-text); max-width: 100%; color-scheme: inherit; }
+.generator input:not(.MuiInputBase-input):not(.MuiSwitch-input), .generator select, .generator button:not(.MuiButtonBase-root) { font: inherit; padding: 9px 11px; border: 1px solid var(--app-control-border); border-radius: 6px; min-height: 39px; background: var(--app-paper); color: var(--app-text); max-width: 100%; color-scheme: inherit; }
 .generator button:not(.MuiButtonBase-root) { cursor: pointer; font-weight: 600; }
 .generator button:not(.MuiButtonBase-root):disabled { opacity: .5; cursor: wait; }
 .generator button:not(.MuiButtonBase-root):hover:not(:disabled) { background: var(--app-hover); }
@@ -66,6 +66,15 @@
 .saved-dashboard .generator-widget[data-updating="true"] .generator-chart-content { opacity: .48; filter: saturate(.7); pointer-events: none; }
 .generator .filter-field-picker { max-width: 720px; margin: 12px 0; }
 .generator .filter-field-picker label { max-width: none; }
+.generator-filter-settings { margin-top: 18px; }
+.generator-filter-settings h3 { margin: 0 0 4px; font-size: 15px; }
+.generator-filter-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.generator-filter-setting { min-width: 0; padding: 12px; border: 1px solid var(--app-border); border-radius: 8px; }
+.generator-filter-setting legend { max-width: 100%; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 600; color: var(--app-text-secondary); }
+.generator-filter-setting-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.generator-filter-mode { display: flex; align-items: center; gap: 2px; }
+.generator-filter-setting-actions .MuiButton-root { min-width: 0; max-width: 100%; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.generator-filter-setting .MuiCollapse-root { margin-top: 10px; }
 .generator-metric-control { display: flex; align-items: flex-end; gap: 6px; flex: 1 1 220px; max-width: 430px; min-width: 0; }
 .generator .generator-metric-control label { min-width: 0; max-width: none; }
 .generator .generator-metric-remove { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 39px; width: 39px; padding: 8px; }
