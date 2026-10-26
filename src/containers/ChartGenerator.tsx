@@ -12,16 +12,17 @@ import { ChartData, ChartType, ColumnAliases, DestinationOption, FilterSelection
 import GeneratorChart from 'components/analytics/GeneratorChart';
 import { sortFilterValues, suggestFilterColumns } from 'utils/sectionFilters';
 import { columnLabel, defaultSort, metricColumns } from 'utils/generatorConfig';
+import { customValueFormatOptions, formatChartValue } from 'utils/charts/customValueFormat';
 import './chart-generator.css';
 
 const initialRead: ReadConfig = { sheet: '', header_row: 1, decimal: ',', types: {} };
 function newWidget(): Widget {
   return { id: crypto.randomUUID(), title: 'Mi gráfico', width: 12, library: 'Plotly', config: {
-    ...initialRead, chart_type: 'bar', aggregation: 'count', x_col: '', y_col: '', y_cols: [], pie_label_mode: 'percent', group_col: '', date_bucket: 'none', filters: {},
+    ...initialRead, chart_type: 'bar', aggregation: 'count', x_col: '', y_col: '', y_cols: [], pie_label_mode: 'percent', group_col: '', date_bucket: 'none', filters: {}, chart_filters: {}, value_formats: {},
     latitude_col: '', longitude_col: '', label_col: '', size_col: '', map_mode: 'markers', map_metric_cols: [],
   } };
 }
-const operations: Record<string, string> = { count: 'Contar registros', sum: 'Sumar', mean: 'Promedio', median: 'Mediana', min: 'Mínimo', max: 'Máximo', distinct: 'Contar valores distintos' };
+const operations: Record<string, string> = { none: 'Sin agregar', count: 'Contar registros', sum: 'Sumar', mean: 'Promedio', median: 'Mediana', min: 'Mínimo', max: 'Máximo', distinct: 'Contar valores distintos' };
 const sortOperations: Record<SortAggregation, string> = {
   alphabetical: 'A-Z', max: 'Máximo', min: 'Mínimo', sum: 'Total (suma)', count: 'Recuento', distinct: 'Recuento diferenciado',
 };
@@ -30,6 +31,9 @@ const multiMetricCharts = new Set<ChartType>(['bar', 'horizontal', 'stacked', 'l
 const supportsAdditionalMetrics = (config: Widget['config']) => (
   multiMetricCharts.has(config.chart_type) && (config.chart_type === 'table' || config.aggregation !== 'count')
 );
+const formatMetricColumns = (config: Widget['config']) => config.chart_type === 'map'
+  ? [...new Set(config.map_metric_cols || [])]
+  : metricColumns(config);
 const labelKey = (value: string) => value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 
 function SortControls({ title, columns, aliases, value, fallbackField, onChange }: {
@@ -84,6 +88,77 @@ function FilterSettingsControls({ displayName, options, value, onChange }: {
           helperText={single && !defaultValue ? 'Obligatorio para la selección individual.' : 'Buscá una opción o escribí el valor exacto.'} />} />
     </Collapse>
   </fieldset>;
+}
+
+function ValueFormatControls({ widgetId, metrics, aliases, preview, value, onChange }: {
+  widgetId: string; metrics: string[]; aliases: ColumnAliases; preview: Preview; value: Record<string, string>;
+  onChange: (value: Record<string, string>) => void;
+}) {
+  const active = metrics.filter(metric => value[metric]).length;
+  const patch = (metric: string, format: string) => {
+    const next = { ...value };
+    if (format) next[metric] = format;
+    else delete next[metric];
+    onChange(next);
+  };
+  return <details className="generator-restrictions"><summary>Formato personalizado{active ? ` · ${active} configurado${active === 1 ? '' : 's'}` : ' (opcional)'}</summary>
+    <p className="generator-hint">Number y Percent ofrecen 0 o 2 decimales. Percent convierte 0,424 en 42,40%. Para un valor que ya viene como 42,40, usá <code>#,##0.00'%'</code>.</p>
+    <div className="generator-format-grid">{metrics.map((metric, index) => {
+      const format = value[metric] || '';
+      const sample = preview.preview.find(row => typeof row[metric] === 'number')?.[metric];
+      const listId = `format-${widgetId}-${index}`;
+      return <label key={metric}>{columnLabel(metric, aliases)}
+        <input aria-label={`Formato de ${columnLabel(metric, aliases)}`} list={listId} maxLength={100} value={format}
+          placeholder="Predeterminado" onChange={event => patch(metric, event.target.value)} />
+        <datalist id={listId}>{customValueFormatOptions.map(option => <option key={option} value={option} />)}</datalist>
+        <small>{typeof sample === 'number' ? `Muestra: ${formatChartValue(sample, format)}` : 'Escribí un formato o elegí una opción.'}</small>
+      </label>;
+    })}</div>
+  </details>;
+}
+
+function ChartFilterControls({ columns, aliases, preview, value, onChange }: {
+  columns: string[]; aliases: ColumnAliases; preview: Preview; value: Record<string, string[]>;
+  onChange: (value: Record<string, string[]>) => void;
+}) {
+  const entries = Object.entries(value);
+  const rename = (current: string, nextColumn: string) => {
+    if (!nextColumn || nextColumn === current || value[nextColumn]) return;
+    const next = { ...value };
+    const selected = next[current];
+    delete next[current];
+    next[nextColumn] = selected;
+    onChange(next);
+  };
+  const remove = (column: string) => {
+    const next = { ...value };
+    delete next[column];
+    onChange(next);
+  };
+  const add = () => {
+    const column = columns.find(item => !value[item]);
+    if (column) onChange({ ...value, [column]: [] });
+  };
+  const active = entries.filter(([, values]) => values.length).length;
+  return <details className="generator-restrictions"><summary>Filtros personalizados{active ? ` · ${active} activo${active === 1 ? '' : 's'}` : ' (opcional)'}</summary>
+    <p className="generator-hint">Estos filtros se aplican solamente a este gráfico. Varias opciones de un campo se combinan como alternativas.</p>
+    <div className="generator-chart-filters">{entries.map(([column, values], index) => <div className="generator-chart-filter" key={column}>
+      <label>Campo<select aria-label={`Filtro personalizado ${index + 1}: campo`} value={column} onChange={event => rename(column, event.target.value)}>
+        {columns.map(option => <option key={option} value={option} disabled={option !== column && !!value[option]}>{columnLabel(option, aliases)}</option>)}
+      </select></label>
+      <Autocomplete multiple freeSolo disableCloseOnSelect size="small"
+        options={sortFilterValues(column, preview.column_meta[column].unique_values.map(item => String(item)))} value={values}
+        onChange={(_, next) => onChange({ ...value, [column]: [...new Set(next.map(String))].slice(0, 100) })}
+        renderInput={params => <TextField {...params} label="Valores" placeholder="Buscar o escribir"
+          inputProps={{ ...params.inputProps, maxLength: 2000, 'aria-label': `Filtro personalizado de ${columnLabel(column, aliases)}` }} />} />
+      <button type="button" className="generator-metric-remove" aria-label={`Quitar filtro personalizado de ${columnLabel(column, aliases)}`} onClick={() => remove(column)}>
+        <Icon icon="material-symbols:close-rounded" width={20} />
+      </button>
+    </div>)}</div>
+    <button type="button" className="generator-add-metric" disabled={entries.length >= Math.min(20, columns.length)} onClick={add}>
+      <Icon icon="material-symbols:add-rounded" width={20} /> Agregar filtro
+    </button>
+  </details>;
 }
 
 function mapColumnDefaults(preview: Preview) {
@@ -224,9 +299,14 @@ export default function ChartGenerator() {
           const yColumn = data.columns.includes(w.config.y_col) ? w.config.y_col : data.columns.find(c => data.column_meta[c].type === 'number') || data.columns[0];
           const additionalMetrics = [...new Set(w.config.y_cols || [])]
             .filter(column => column !== yColumn && data.columns.includes(column)).slice(0, 19);
+          const chartFilters = Object.fromEntries(Object.entries(w.config.chart_filters || {})
+            .filter(([column]) => data.columns.includes(column)).slice(0, 20));
+          const valueFormats = Object.fromEntries(Object.entries(w.config.value_formats || {})
+            .filter(([column]) => data.columns.includes(column)).slice(0, 20));
           return { ...w, config: { ...w.config,
             x_col: data.columns.includes(w.config.x_col) ? w.config.x_col : data.columns[0],
             y_col: yColumn, y_cols: additionalMetrics,
+            chart_filters: chartFilters, value_formats: valueFormats,
             latitude_col: data.columns.includes(w.config.latitude_col || '') ? w.config.latitude_col : mapDefaults.latitude,
             longitude_col: data.columns.includes(w.config.longitude_col || '') ? w.config.longitude_col : mapDefaults.longitude,
             label_col: data.columns.includes(w.config.label_col || '') ? w.config.label_col : mapDefaults.label,
@@ -500,6 +580,11 @@ export default function ChartGenerator() {
           {!!w.config.group_col && <SortControls title="Orden de series" columns={preview.columns} aliases={columnAliases} value={w.config.series_sort}
             fallbackField={w.config.group_col} onChange={sort => patchWidget(w.id, { config: { ...w.config, series_sort: sort } })} />}
         </details>}
+        {!!formatMetricColumns(w.config).length && <ValueFormatControls widgetId={w.id} metrics={formatMetricColumns(w.config)} aliases={columnAliases}
+          preview={preview} value={w.config.value_formats || {}}
+          onChange={valueFormats => patchWidget(w.id, { config: { ...w.config, value_formats: valueFormats } })} />}
+        <ChartFilterControls columns={preview.columns} aliases={columnAliases} preview={preview} value={w.config.chart_filters || {}}
+          onChange={chartFilters => patchWidget(w.id, { config: { ...w.config, chart_filters: chartFilters } })} />
         {chartErrors[w.id] && <p role="alert" className="generator-error">{chartErrors[w.id]}</p>}
         {results[w.id] && <><h3>{w.title}</h3><p className="generator-hint">{results[w.id].filtered_rows} registros · {w.config.chart_type === 'map' ? 'Mapa' : operations[w.config.aggregation]}{['box', 'scatter', 'histogram'].includes(w.config.chart_type) ? ' (este tipo usa los valores individuales)' : ''}</p>{results[w.id].warnings.map((v, i) => <p className="generator-hint" key={i}>{v}</p>)}<GeneratorChart widget={w} result={results[w.id]} aliases={columnAliases} /></>}
       </section>)}</div>

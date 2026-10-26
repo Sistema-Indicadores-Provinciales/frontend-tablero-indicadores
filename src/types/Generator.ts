@@ -21,6 +21,8 @@ export interface ChartConfig extends ReadConfig {
   y_cols?: string[];
   pie_label_mode?: PieLabelMode;
   date_bucket: string; filters: Record<string, string[]>;
+  chart_filters?: Record<string, string[]>;
+  value_formats?: Record<string, string>;
   category_sort?: SortConfig; series_sort?: SortConfig;
   latitude_col?: string; longitude_col?: string; label_col?: string; size_col?: string; map_mode?: 'markers' | 'circles';
   map_metric_cols?: string[];

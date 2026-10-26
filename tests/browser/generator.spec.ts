@@ -94,7 +94,35 @@ test('allows additional metrics on compatible charts', async ({ page }) => {
   await page.getByRole('combobox', { name: 'Tipo de gráfico', exact: true }).selectOption('scatter');
   await expect(addMetric).toBeDisabled();
   await page.getByRole('combobox', { name: 'Tipo de gráfico', exact: true }).selectOption('table');
+  await page.getByRole('button', { name: 'Quitar métrica adicional 1', exact: true }).click();
   await expect(addMetric).toBeEnabled();
+});
+
+test('supports no aggregation, per-metric formats and chart-specific filters', async ({ page }) => {
+  const widget = page.locator('.generator-widget').first();
+  await widget.getByRole('combobox', { name: 'Valor / eje Y', exact: true }).selectOption('Valor');
+  await widget.getByRole('combobox', { name: 'Operación', exact: true }).selectOption('none');
+
+  await widget.getByText('Formato personalizado', { exact: false }).click();
+  await widget.getByLabel('Formato de Valor').fill("#,##0.00'%'");
+  await expect(widget.getByText('Muestra: 0,00%')).toBeVisible();
+
+  await widget.getByText('Filtros personalizados', { exact: false }).click();
+  await widget.getByRole('button', { name: 'Agregar filtro', exact: true }).click();
+  const filter = widget.getByRole('combobox', { name: 'Filtro personalizado de Mes', exact: true });
+  await filter.fill('2');
+  await filter.press('Enter');
+
+  const request = page.waitForRequest(response => response.url().endsWith('/v2/sources/test-source/chart'));
+  await widget.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({
+    aggregation: 'none',
+    value_formats: { Valor: "#,##0.00'%'" },
+    chart_filters: { Mes: ['2'] },
+  });
+  await expect(widget.locator('.js-plotly-plot')).toBeVisible();
+  await widget.locator('.barlayer .point').nth(1).hover();
+  await expect(widget.locator('.hoverlayer')).toContainText('10,00%');
 });
 
 test('pie charts keep category labels outside and values inside each slice', async ({ page }) => {
