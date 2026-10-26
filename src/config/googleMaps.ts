@@ -17,6 +17,7 @@ export const FORMOSA_PROVINCE_ZOOM = 7;
 
 export const MAP_OPTIONS: google.maps.MapOptions = {
   disableDefaultUI: false,
+  mapTypeControl: false,
   zoomControl: true,
   scrollwheel: true,
   streetViewControl: false,
