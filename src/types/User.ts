@@ -6,7 +6,6 @@ export interface DashboardAccess {
 export default class User {
   public _id?: string;
   public username = '';
-  public email = '';
   public profileType?: 'ADMIN' | 'INVITADO';
   public access: DashboardAccess[] = [];   // ← inicializo aquí
   public access_token?: string;
