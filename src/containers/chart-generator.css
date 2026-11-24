@@ -94,6 +94,13 @@ html.dark .generator-map .gm-ui-hover-effect { filter: invert(1) grayscale(1) br
 .generator-map-info dl > div { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(70px, auto); gap: 12px; }
 .generator-map-info dt { font-weight: 600; overflow-wrap: anywhere; }
 .generator-map-info dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.generator-location-summary { font-size: 13px; color: var(--app-text-secondary); margin: 0 0 10px; }
+.generator-location-detail + .generator-location-detail { border-top: 1px solid var(--app-border); margin-top: 8px; padding-top: 8px; }
+.generator-map-legend { display: flex; gap: 10px 18px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; }
+.generator-map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.generator-map-legend i { width: 10px; height: 10px; flex-shrink: 0; border-radius: 50%; }
+.generator-map-details { margin-top: 14px; font-size: 13px; }
+.generator-map-details summary { cursor: pointer; }
 @media(max-width: 599px) {
   .section-filter-bar { top: 56px; gap: 8px; padding: 8px 0; }
   .section-filter-controls { gap: 8px; }

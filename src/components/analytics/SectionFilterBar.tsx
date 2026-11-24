@@ -147,7 +147,7 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
       {canUseCustom && custom && !shown.length && <Button size="small"
         disabled={mode === 'include' && !selectedValues.includes(custom) && selectedValues.length >= 100}
         onClick={addCustom} sx={{ flexShrink: 0 }}>Usar «{custom}»</Button>}
-      {canAddCustom && <Typography fontSize={11} color="text.secondary" sx={{ px: 1.5, py: 1 }}>Se muestran 100 sugerencias. Podés escribir otro valor y presionar Enter.</Typography>}
+      {canAddCustom && <Typography fontSize={11} color="text.secondary" sx={{ px: 1.5, py: 1 }}>Se muestran {options?.values.length} sugerencias. Podés escribir otro valor y presionar Enter.</Typography>}
     </Popover>
   </>;
 }

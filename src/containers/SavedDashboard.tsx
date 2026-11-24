@@ -111,7 +111,10 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     setWorkspace(null); setResults({}); setFilterOptions({}); setCatalog({}); setFilters({});
     setViewLoading(true); setRendering(false); setRefreshing(false); setError(''); setSnapshotExpired(false);
     analytics.get<WorkspaceView>(`/v2/workspaces/${encodeURIComponent(workspaceId)}/view`, { signal: controller.signal })
-      .then(({ data }) => { if (!controller.signal.aborted) setWorkspace(data); })
+      .then(({ data }) => { if (!controller.signal.aborted) {
+        setWorkspace(data);
+        setFilters(Object.fromEntries(Object.entries(data.default_filters || {}).map(([column, values]) => [column, { mode: 'include', values }])));
+      } })
       .catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); })
       .finally(() => { if (!controller.signal.aborted) setViewLoading(false); });
     return () => controller.abort();
@@ -149,7 +152,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
       </div>
     </header>
     {error && <p role="alert" className="generator-error">{error} <button type="button" onClick={snapshotExpired ? refreshData : retry} disabled={busy}>{snapshotExpired ? 'Actualizar datos' : 'Reintentar'}</button></p>}
-    {workspace?.source_kind === 'google' && (workspace.source_access_mode === 'public'
+    {(workspace?.requires_google || workspace?.source_kind === 'google') && (workspace.source_access_mode === 'public' && !workspace.requires_google
       ? <p className="generator-hint">Google Sheets · Los datos se leen al entrar o al usar Actualizar datos.</p>
       : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={handleConnectionChange} busy={busy} />)}
     {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} aliases={workspace.column_aliases} />}

@@ -1,4 +1,4 @@
-import { ComponentProps, lazy, Suspense, useCallback, useEffect, useRef } from 'react';
+import { ComponentProps, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type EChartsReact from 'echarts-for-react';
 import { ChartData, ColumnAliases, Scalar, Widget } from 'types/Generator';
 import { useChartTheme } from 'utils/charts/chartTheme';
@@ -6,6 +6,7 @@ import { columnLabel } from 'utils/generatorConfig';
 const Plot = lazy(() => import('react-plotly.js'));
 const ECharts = lazy(() => import('echarts-for-react'));
 const MapsChart = lazy(() => import('components/graphics/MapsChart'));
+const LocationMap = lazy(() => import('./LocationMap'));
 function ResponsiveECharts(props: ComponentProps<typeof ECharts>) {
   const container = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsReact>(null);
@@ -31,13 +32,33 @@ const mapValue = (value: Scalar) => value == null ? 'Sin dato'
 const chartNumber = (value: number | null) => value == null ? 'Sin dato'
   : value.toLocaleString('es-AR', { maximumFractionDigits: 2 });
 const chartPercent = (value: number) => `${value.toLocaleString('es-AR', { maximumFractionDigits: 2 })} %`;
+function ChartTable({ result, aliases }: { result: ChartData; aliases?: ColumnAliases }) {
+  const [page, setPage] = useState(0);
+  const records = result.records || [], size = 100;
+  useEffect(() => setPage(0), [result.records]);
+  const current = Math.min(page, Math.max(0, Math.ceil(records.length / size) - 1));
+  const start = current * size;
+  return <><div className="generator-table"><table><thead><tr>{result.columns?.map(c => <th key={c}>{columnLabel(c, aliases)}</th>)}</tr></thead>
+    <tbody>{records.slice(start, start + size).map((row, i) => <tr key={start + i}>{result.columns?.map(c => <td key={c}>{mapValue(row[c])}</td>)}</tr>)}</tbody></table></div>
+    <div className="generator-controls" aria-label="Paginación de tabla"><span>{records.length ? start + 1 : 0}–{Math.min(start + size, records.length)} de {records.length.toLocaleString('es-AR')}</span>
+      <button type="button" disabled={!current} onClick={() => setPage(current - 1)}>Anterior</button>
+      <button type="button" disabled={start + size >= records.length} onClick={() => setPage(current + 1)}>Siguiente</button>
+    </div></>;
+}
 export default function GeneratorChart({ widget, result, showIndicatorTitle = true, aliases }: {
   widget: Widget; result: ChartData; showIndicatorTitle?: boolean; aliases?: ColumnAliases;
 }) {
   const chartTheme = useChartTheme();
   const kind = widget.config.chart_type;
-  if (kind === 'table') return <div className="generator-table"><table><thead><tr>{result.columns?.map(c => <th key={c}>{columnLabel(c, aliases)}</th>)}</tr></thead><tbody>{result.records?.map((row, i) => <tr key={i}>{result.columns?.map(c => <td key={c}>{String(row[c] ?? '—')}</td>)}</tr>)}</tbody></table></div>;
+  const percentage = widget.config.value_format === 'percent' || widget.config.value_format === 'percent_points';
+  const percentPoints = widget.config.value_format === 'percent_points';
+  const metricValue = (value: number | null) => value == null ? 'Sin dato' : percentage ? chartPercent(value * (percentPoints ? 1 : 100)) : chartNumber(value);
+  if (kind === 'table') return <ChartTable result={result} aliases={aliases} />;
   if (kind === 'map') {
+    if (widget.config.map_lookup) return <>
+      <Suspense fallback={<p>Cargando mapa…</p>}><LocationMap widget={widget} result={result} aliases={aliases} /></Suspense>
+      <details className="generator-map-details"><summary>Ver detalle por ubicación</summary><ChartTable result={result} aliases={aliases} /></details>
+    </>;
     const points = result.map_points || [];
     if (!points.length) return <p>No hay coordenadas válidas para los filtros seleccionados.</p>;
     const magnitudes = points.map(point => Math.abs(point.value || 0)).filter(value => value > 0);
@@ -58,8 +79,16 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     return <Suspense fallback={<p>Cargando mapa…</p>}><div className="generator-map"><MapsChart height="450px"
       displayMode={widget.config.map_mode || 'markers'} markers={markers} circles={circles} fitBounds highlightFormosa /></div></Suspense>;
   }
+  if (kind === 'indicator' && widget.config.indicator_text_column) {
+    return <div className="generator-indicator"><strong>{result.indicator_text ?? 'Sin datos'}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
+  }
+  if (kind === 'indicator') {
+    const value = result.datasets[0]?.data[0] ?? (widget.config.indicator_empty === 'zero' ? 0 : null);
+    const decimals = widget.config.indicator_decimals;
+    const formatted = value == null ? undefined : percentage ? metricValue(value) : value.toLocaleString('es-AR', decimals == null ? undefined : { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return <div className="generator-indicator"><strong>{formatted == null ? 'Sin datos' : `${formatted}${widget.config.indicator_suffix || ''}`}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
+  }
   if (!result.datasets.length) return <p>No hay datos para los filtros seleccionados.</p>;
-  if (kind === 'indicator') return <div className="generator-indicator"><strong>{result.datasets[0].data[0]?.toLocaleString('es-AR') ?? 'Sin datos'}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
   let labels = result.labels.map(v => v == null ? 'Sin dato' : v);
   let datasets = result.datasets.map(dataset => ({ ...dataset, label: dataset.metric
     ? `${columnLabel(dataset.metric, aliases)}${dataset.group !== undefined ? ` · ${dataset.group}` : ''}`
@@ -82,7 +111,7 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
   const renderedMetrics = new Set(result.datasets.flatMap(dataset => dataset.metric ? [dataset.metric] : []));
   const yLabel = kind === 'histogram' || widget.config.aggregation === 'count'
     ? 'Registros'
-    : renderedMetrics.size > 1 ? 'Valores' : columnLabel(widget.config.y_col, aliases);
+    : widget.config.metric_ratio ? widget.config.metric_ratio.subtract_denominator ? 'Variación (%)' : 'Cociente' : renderedMetrics.size > 1 ? 'Valores' : columnLabel(widget.config.y_col, aliases);
   const pie = kind === 'pie' || kind === 'donut';
   const pieLabelMode = widget.config.pie_label_mode || 'percent';
   const pieValues = pie ? datasets[0].data : [];
@@ -108,7 +137,7 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
       nameTextStyle: { color: chartTheme.textSecondary },
     };
     let xAxis: any = { ...axisStyle, type: kind === 'scatter' ? 'value' : 'category', data: labels, name: xLabel, axisLabel: { ...axisStyle.axisLabel, hideOverlap: true } };
-    let yAxis: any = { ...axisStyle, type: 'value', name: yLabel };
+    let yAxis: any = { ...axisStyle, type: 'value', name: yLabel, axisLabel: { ...axisStyle.axisLabel, formatter: percentage ? metricValue : undefined } };
     if (kind === 'horizontal') [xAxis, yAxis] = [yAxis, xAxis];
     if (pie) {
       const radius = kind === 'donut' ? ['40%', '65%'] : '65%';
@@ -144,7 +173,8 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
       textStyle: { color: chartTheme.text, fontFamily: chartTheme.fontFamily },
       tooltip: { trigger: pie || kind === 'scatter' || kind === 'heatmap' ? 'item' : 'axis', renderMode: 'richText', backgroundColor: chartTheme.tooltipBackground, borderColor: chartTheme.border,
         textStyle: { color: chartTheme.tooltipText, fontWeight: pie ? 700 : undefined },
-        formatter: pie ? (params: any) => `${params.marker}${params.name}: ${chartNumber(params.value)} (${chartPercent(params.percent)})` : undefined },
+        valueFormatter: percentage ? metricValue : undefined,
+        formatter: pie ? (params: any) => `${params.marker}${params.name}: ${metricValue(params.value)} (${chartPercent(params.percent)})` : undefined },
       legend: { type: 'scroll', bottom: 0, textStyle: { color: chartTheme.textSecondary } },
       grid: { left: 75, right: 35, top: 45, bottom: 85 },
       xAxis, yAxis, series,
@@ -157,6 +187,7 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     mode: kind === 'scatter' ? 'markers' : 'lines+markers',
     fill: kind === 'area' ? 'tozeroy' : undefined,
     marker: { color: chartTheme.colors[i % chartTheme.colors.length] }, connectgaps: false,
+    hovertemplate: percentage ? (kind === 'horizontal' ? `%{y}: %{x:${percentPoints ? '.2f' : '.2%'}}${percentPoints ? '%' : ''}<extra>%{fullData.name}</extra>` : `%{x}: %{y:${percentPoints ? '.2f' : '.2%'}}${percentPoints ? '%' : ''}<extra>%{fullData.name}</extra>`) : undefined,
   }));
   if (kind === 'horizontal') traces = traces.map(t => ({ ...t, x: t.y, y: t.x, orientation: 'h' }));
   if (pie) {
@@ -183,8 +214,8 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     colorway: chartTheme.colors,
     paper_bgcolor: chartTheme.paper, plot_bgcolor: chartTheme.paper,
     hoverlabel: { bgcolor: chartTheme.tooltipBackground, bordercolor: chartTheme.border, font: { color: chartTheme.tooltipText } },
-    xaxis: { title: { text: kind === 'horizontal' ? yLabel : xLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true },
-    yaxis: { title: { text: kind === 'horizontal' ? xLabel : yLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true },
+    xaxis: { title: { text: kind === 'horizontal' ? yLabel : xLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true, tickformat: percentage && kind === 'horizontal' ? percentPoints ? '.0f' : '.0%' : undefined, ticksuffix: percentPoints && kind === 'horizontal' ? '%' : undefined },
+    yaxis: { title: { text: kind === 'horizontal' ? xLabel : yLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true, tickformat: percentage && kind !== 'horizontal' ? percentPoints ? '.0f' : '.0%' : undefined, ticksuffix: percentPoints && kind !== 'horizontal' ? '%' : undefined },
     barmode: kind === 'stacked' ? 'stack' : 'group', legend: { orientation: 'h', y: -0.25, font: { color: chartTheme.textSecondary } },
   }} config={{ responsive: true, displaylogo: false }} useResizeHandler style={{ width: '100%' }} /></Suspense>;
 }
