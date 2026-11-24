@@ -141,7 +141,7 @@ test('publication errors keep the dialog and selected users for a safe retry', a
 test('the existing Users screen grants generated sections and retains the dialog on failure', async ({ page }) => {
   const state = await mockSystem(page, { old: true });
   state.published = true;
-  await page.route('**/user/get-all', route => route.fulfill({ json: { data: [{ _id: 'reader', username: 'Bruno', email: 'bruno@example.test', profileType: 'INVITADO', access: [] }] } }));
+  await page.route('**/user/get-all', route => route.fulfill({ json: { data: [{ _id: 'reader', username: 'Bruno', profileType: 'INVITADO', access: [] }] } }));
   let submitted: any;
   await page.route('**/user/access/reader', route => { submitted = route.request().postDataJSON(); return route.fulfill({ status: 503, json: { error: 'No se pudieron guardar los accesos.' } }); });
   await page.goto('/usuarios');

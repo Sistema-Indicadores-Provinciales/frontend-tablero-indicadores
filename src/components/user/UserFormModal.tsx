@@ -12,7 +12,7 @@ interface UserFormModalProps {
 }
 
 const UserFormModal: React.FC<UserFormModalProps> = (props) => {
-  const [form, setForm] = useState<Partial<UserForm>>({})
+  const [form, setForm] = useState<Partial<UserForm>>(() => new UserForm({}))
   const [isEdit, setIsEdit] = useState<boolean>(false)
 
   const handleChange = (event: React.ChangeEvent<{ name?: string; value: unknown }>) => {
@@ -62,15 +62,6 @@ const UserFormModal: React.FC<UserFormModalProps> = (props) => {
           type="text"
           fullWidth
           value={form?.username}
-          onChange={handleChange}
-        />
-        <TextField
-          margin="dense"
-          name="email"
-          label="Email"
-          type="email"
-          fullWidth
-          value={form?.email}
           onChange={handleChange}
         />
         {

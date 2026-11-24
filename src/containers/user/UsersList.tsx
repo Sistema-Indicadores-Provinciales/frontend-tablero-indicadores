@@ -59,7 +59,7 @@ const UserList = () => {
   const handleConfirmDelete = async () => {
     if (!selectedUser) return;
     try {
-      await deleteUser(selectedUser.username, selectedUser.email);
+      await deleteUser(selectedUser.username);
       setListUsers((prevUsers) => prevUsers.filter((u) => u.username !== selectedUser.username));
       setConfirmDeleteOpen(false);
       setSelectedUser(undefined);

@@ -41,7 +41,6 @@ const TableItems: React.FC<TableItemsProps> = (props) => {
         <TableHead>
           <TableRow>
             <TableCell>Nombre</TableCell>
-            <TableCell>Email</TableCell>
             <TableCell>Tipo de usuario</TableCell>
             <TableCell align="center" width={'160px'}>Acciones</TableCell>
           </TableRow>
@@ -51,11 +50,10 @@ const TableItems: React.FC<TableItemsProps> = (props) => {
             <React.Fragment key={index}>
               <TableRow>
                 <TableCell>{user.username}</TableCell>
-                <TableCell>{user.email}</TableCell>
                 <TableCell>{user.profileType}</TableCell>
                 <TableCell align="center">
                   {props?.onClickDelete && (
-                    <IconButton color="secondary" onClick={() => handleDelete(user)}>
+                    <IconButton aria-label={`Eliminar a ${user.username}`} color="secondary" onClick={() => handleDelete(user)}>
                       <DeleteIcon />
                     </IconButton>
                   )}
