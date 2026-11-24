@@ -144,7 +144,16 @@ const Maps: React.FC<MapsProps> = ({
   const [selectedInfo, setSelectedInfo] = useState<{ key: string; position: google.maps.LatLngLiteral; content: React.ReactNode } | null>(null);
   const [hoveredInfo, setHoveredInfo] = useState<{ key: string; position: google.maps.LatLngLiteral; content: React.ReactNode } | null>(null);
   const [boundaryError, setBoundaryError] = useState<string | null>(null);
-  const visibleInfo = selectedInfo || hoveredInfo;
+  // Resolve the selected point against current props: a filter may change its
+  // values or remove it while the information window is open.
+  const currentInfo = (selection: typeof selectedInfo) => {
+    if (!selection) return null;
+    const marker = markers.find(item => `marker:${item.id}` === selection.key && item.visible !== false);
+    if (marker?.infoContent) return { position: marker.position, content: marker.infoContent };
+    const circle = circles.find(item => `circle:${item.id}` === selection.key);
+    return circle?.infoContent ? { position: circle.center, content: circle.infoContent } : null;
+  };
+  const visibleInfo = currentInfo(selectedInfo) || currentInfo(hoveredInfo);
   const mapCenter = highlightFormosa ? FORMOSA_PROVINCE_CENTER : center;
   const mapZoom = highlightFormosa ? FORMOSA_PROVINCE_ZOOM : zoom;
   const isDarkMode = theme.palette.mode === "dark";

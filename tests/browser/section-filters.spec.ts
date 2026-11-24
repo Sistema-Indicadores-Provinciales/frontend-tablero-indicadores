@@ -73,6 +73,26 @@ async function setup(page: Page, legacy = false, contextual = false) {
   return state;
 }
 
+test('empty counters show zero only when the original explicitly requests it', async ({ page }) => {
+  const state = await setup(page);
+  const workspace = { ...state.workspace, widgets: [
+    { ...counters[0], id: 'zero', title: 'Interior', config: { ...config, indicator_empty: 'zero' } },
+    { ...counters[1], id: 'missing', title: 'Actividades' },
+  ] };
+  await page.route('**/v2/workspaces/saved/render', route => route.fulfill({ json: {
+    workspace: { ...workspace, can_edit: true, source_kind: 'upload' }, filter_options: {},
+    widgets: Object.fromEntries(workspace.widgets.map(widget => [widget.id, { data: {
+      labels: [], datasets: [], filtered_rows: 0, warnings: [], filter_options: {}, ignored_filters: [],
+    } }])),
+  } }));
+  await page.goto('/educacion/intervenciones');
+  const zero = page.getByRole('region', { name: 'Interior', exact: true });
+  const missing = page.getByRole('region', { name: 'Actividades', exact: true });
+  await expect(zero.locator('.generator-indicator strong')).toHaveText('0');
+  await expect(missing.getByRole('alert')).toHaveText('No hay datos para los filtros seleccionados.');
+  await expect(missing.locator('.generator-indicator')).toHaveCount(0);
+});
+
 test('one compact bar filters all compatible charts immediately and stays below the header on scroll', async ({ page }) => {
   const state = await setup(page);
   await page.goto('/educacion/intervenciones');
