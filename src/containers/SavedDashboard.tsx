@@ -5,8 +5,8 @@ import { isAxiosError } from 'axios';
 import { analytics, errorMessage } from 'config/Analytics';
 import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
-import { FilterOptions, SectionFilters, SectionRenderResponse, SectionWidgetRender, Widget, WorkspaceView } from 'types/Generator';
-import SavedChart from 'components/analytics/SavedChart';
+import { FilterOptions, SectionFilters, SectionRenderResponse, SectionWidgetRender, WorkspaceView } from 'types/Generator';
+import SectionContent from 'components/analytics/SectionContent';
 import SectionFilterBar from 'components/analytics/SectionFilterBar';
 import { suggestFilterColumns } from 'utils/sectionFilters';
 import './chart-generator.css';
@@ -127,8 +127,6 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
   useEffect(() => () => request.current?.abort(), []);
 
   const widgets = workspace?._id === workspaceId ? workspace.widgets : [];
-  const counters = widgets.filter(widget => widget.config.chart_type === 'indicator');
-  const charts = widgets.filter(widget => widget.config.chart_type !== 'indicator');
   const retry = () => { void renderSection(activeFilters); };
   const refreshData = () => { void renderSection(activeFilters, true); };
   const handleConnectionChange = () => {
@@ -136,8 +134,6 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     setResults({}); setFilterOptions({}); setSnapshotExpired(false);
     setConnectionVersion(version => version + 1);
   };
-  const renderWidget = (widget: Widget) => <SavedChart key={widget.id} widget={widget} rendered={results[widget.id]}
-    updating={rendering} onRetry={retry} aliases={workspace?.column_aliases} />;
   const busy = viewLoading || rendering;
   const statusText = viewLoading ? 'Cargando sección…' : rendering
     ? (refreshing ? 'Actualizando datos…' : 'Aplicando filtros…')
@@ -156,7 +152,6 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
       ? <p className="generator-hint">Google Sheets · Los datos se leen al entrar o al usar Actualizar datos.</p>
       : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={handleConnectionChange} busy={busy} />)}
     {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} aliases={workspace.column_aliases} />}
-    {counters.length > 0 && <section className="generator-counters" aria-label="Contadores de la sección">{counters.map(renderWidget)}</section>}
-    {charts.length > 0 && <div className="generator-grid">{charts.map(renderWidget)}</div>}
+    <SectionContent widgets={widgets} results={results} updating={rendering} onRetry={retry} aliases={workspace?.column_aliases} />
   </main>;
 }
