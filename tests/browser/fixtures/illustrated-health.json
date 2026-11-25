@@ -1,0 +1,196 @@
+[
+  {
+    "key": "covid-diario",
+    "name": "Informe diario · COVID-19",
+    "widgets": [
+      {
+        "id": "covid-diagnosticados",
+        "title": "Casos diagnosticados",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-recuperados",
+        "title": "Pacientes recuperados",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-tests-total",
+        "title": "Tests realizados hasta la fecha",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-activos",
+        "title": "Casos activos",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-fallecimientos",
+        "title": "Fallecimientos",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-tests-dia",
+        "title": "Tests realizados en las últimas 24 horas",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-altas",
+        "title": "Altas en las últimas 24 horas",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-casos-dia",
+        "title": "Casos diagnosticados en las últimas 24 horas",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-positividad",
+        "title": "Positividad hasta la fecha",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-positividad-dia",
+        "title": "Positividad en las últimas 24 horas",
+        "type": "indicator"
+      },
+      {
+        "id": "covid-localidades",
+        "title": "Casos activos por localidad",
+        "type": "map"
+      }
+    ]
+  },
+  {
+    "key": "dengue-diario",
+    "name": "Informe diario · Dengue",
+    "widgets": [
+      {
+        "id": "dengue-activos",
+        "title": "Casos activos",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-hospitalizados",
+        "title": "Hospitalizados",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-nuevos",
+        "title": "Casos nuevos",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-capital",
+        "title": "Capital",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-interior",
+        "title": "Interior",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-barrios",
+        "title": "Barrios trabajados",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-visitadas",
+        "title": "Viviendas visitadas",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-trabajadas",
+        "title": "Viviendas trabajadas",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-cerradas",
+        "title": "Viviendas cerradas",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-positivas",
+        "title": "Viviendas positivas",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-renuentes",
+        "title": "Viviendas renuentes",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-moviles",
+        "title": "Móviles utilizados",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-fumigados",
+        "title": "Barrios con fumigación espacial",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-barrios-detalle",
+        "title": "Barrios trabajados · detalle",
+        "type": "indicator"
+      },
+      {
+        "id": "dengue-localidades",
+        "title": "Casos nuevos por localidad",
+        "type": "map"
+      }
+    ]
+  },
+  {
+    "key": "vacunacion-dengue",
+    "name": "Vacunación · Dengue",
+    "widgets": [
+      {
+        "id": "vac-dengue-poblacion",
+        "title": "Población objetivo",
+        "type": "indicator"
+      },
+      {
+        "id": "vac-dengue-dosis",
+        "title": "Vacunas aplicadas en total",
+        "type": "indicator"
+      },
+      {
+        "id": "vac-dengue-cobertura",
+        "title": "Cobertura",
+        "type": "indicator"
+      },
+      {
+        "id": "vac-dengue-localidades",
+        "title": "Vacunas aplicadas por localidad",
+        "type": "bar"
+      },
+      {
+        "id": "vac-dengue-tabla",
+        "title": "Población objetivo por localidad",
+        "type": "table"
+      }
+    ]
+  },
+  {
+    "key": "vacunacion-covid",
+    "name": "Vacunación · COVID-19",
+    "widgets": [
+      {
+        "id": "vac-covid-total",
+        "title": "Personas vacunadas",
+        "type": "indicator"
+      },
+      {
+        "id": "vac-covid-departamentos",
+        "title": "Personas vacunadas por departamento",
+        "type": "bar"
+      },
+      {
+        "id": "vac-covid-edades",
+        "title": "Personas vacunadas por rango etario",
+        "type": "table"
+      }
+    ]
+  }
+]

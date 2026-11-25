@@ -1,0 +1,34 @@
+.illustrated-section { margin-top: 18px; }
+.illustrated-group { margin: 0 0 24px; min-width: 0; }
+.generator .illustrated-group-title { font-size: 15px; font-weight: 650; color: var(--app-text-secondary); margin: 0 0 12px; letter-spacing: .3px; }
+.illustrated-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.illustrated-summary { min-width: 0; }
+.illustrated-summary-with-art { display: grid; grid-template-columns: minmax(100px, 170px) minmax(0, 1fr); gap: 18px; align-items: center; }
+.illustrated-artwork { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 12px; border-radius: 16px; background: #f0f5f7; }
+.illustrated-artwork .section-illustration { width: 100%; max-width: 160px; height: auto; aspect-ratio: 1; object-fit: contain; }
+.illustrated-indicators, .illustrated-aside { min-width: 0; }
+.illustrated-section .generator-counters { margin-top: 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); }
+.illustrated-section .generator-grid { margin-top: 0; }
+.illustrated-section > .generator-grid { margin-top: 24px; }
+.illustrated-aside .generator-widget { grid-column: 1 / -1 !important; }
+.illustrated-section .generator-counter { min-height: 116px; }
+.generator-counter-illustrated .generator-counter-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.generator-counter-illustrated .generator-counter-heading h2 { min-width: 0; }
+.generator-counter-heading .section-illustration { flex: 0 0 36px; width: 36px; height: 36px; object-fit: contain; }
+html.dark .generator-counter-heading .section-illustration-mono { filter: invert(1); opacity: .85; }
+.illustrated-section[data-section-design="vacunacion-covid"] .illustrated-summary-with-art { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); }
+.illustrated-section[data-section-design="vacunacion-covid"] .illustrated-artwork { flex-wrap: nowrap; }
+.illustrated-section[data-section-design="vacunacion-covid"] .illustrated-artwork .section-illustration { width: min(28%, 150px); }
+.illustrated-group, .illustrated-summary { scroll-margin-top: 145px; }
+@media (max-width: 1100px) {
+  .illustrated-split { grid-template-columns: minmax(0, 1fr); }
+  .illustrated-split .illustrated-summary-with-art { grid-template-columns: 140px minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .illustrated-summary-with-art, .illustrated-split .illustrated-summary-with-art,
+  .illustrated-section[data-section-design="vacunacion-covid"] .illustrated-summary-with-art { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .illustrated-artwork { padding: 10px; }
+  .illustrated-artwork .section-illustration { width: 100px; }
+  .illustrated-section .generator-counters { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .illustrated-section .generator-counter { min-height: 100px; }
+}
