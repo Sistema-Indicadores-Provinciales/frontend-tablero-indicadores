@@ -3,6 +3,7 @@ import type EChartsReact from 'echarts-for-react';
 import { ChartData, ColumnAliases, Scalar, Widget } from 'types/Generator';
 import { useChartTheme } from 'utils/charts/chartTheme';
 import { columnLabel } from 'utils/generatorConfig';
+import { presentValue } from 'utils/metricPresentation';
 const Plot = lazy(() => import('react-plotly.js'));
 const ECharts = lazy(() => import('echarts-for-react'));
 const MapsChart = lazy(() => import('components/graphics/MapsChart'));
@@ -32,14 +33,14 @@ const mapValue = (value: Scalar) => value == null ? 'Sin dato'
 const chartNumber = (value: number | null) => value == null ? 'Sin dato'
   : value.toLocaleString('es-AR', { maximumFractionDigits: 2 });
 const chartPercent = (value: number) => `${value.toLocaleString('es-AR', { maximumFractionDigits: 2 })} %`;
-function ChartTable({ result, aliases }: { result: ChartData; aliases?: ColumnAliases }) {
+function ChartTable({ result, aliases, config }: { result: ChartData; aliases?: ColumnAliases; config?: Widget['config'] }) {
   const [page, setPage] = useState(0);
   const records = result.records || [], size = 100;
   useEffect(() => setPage(0), [result.records]);
   const current = Math.min(page, Math.max(0, Math.ceil(records.length / size) - 1));
   const start = current * size;
   return <><div className="generator-table"><table><thead><tr>{result.columns?.map(c => <th key={c}>{columnLabel(c, aliases)}</th>)}</tr></thead>
-    <tbody>{records.slice(start, start + size).map((row, i) => <tr key={start + i}>{result.columns?.map(c => <td key={c}>{mapValue(row[c])}</td>)}</tr>)}</tbody></table></div>
+    <tbody>{records.slice(start, start + size).map((row, i) => <tr key={start + i}>{result.columns?.map(c => <td key={c}>{config?.numeric_formats?.[c] || config?.empty_text ? presentValue(row[c], config?.numeric_formats?.[c], config?.empty_text) : mapValue(row[c])}</td>)}</tr>)}</tbody></table></div>
     <div className="generator-controls" aria-label="Paginación de tabla"><span>{records.length ? start + 1 : 0}–{Math.min(start + size, records.length)} de {records.length.toLocaleString('es-AR')}</span>
       <button type="button" disabled={!current} onClick={() => setPage(current - 1)}>Anterior</button>
       <button type="button" disabled={start + size >= records.length} onClick={() => setPage(current + 1)}>Siguiente</button>
@@ -52,8 +53,10 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
   const kind = widget.config.chart_type;
   const percentage = widget.config.value_format === 'percent' || widget.config.value_format === 'percent_points';
   const percentPoints = widget.config.value_format === 'percent_points';
-  const metricValue = (value: number | null) => value == null ? 'Sin dato' : percentage ? chartPercent(value * (percentPoints ? 1 : 100)) : chartNumber(value);
-  if (kind === 'table') return <ChartTable result={result} aliases={aliases} />;
+  const metricValue = (value: number | null, field = widget.config.y_col) => widget.config.numeric_formats?.[field]
+    ? presentValue(value, widget.config.numeric_formats[field], widget.config.empty_text)
+    : value == null ? widget.config.empty_text ?? 'Sin dato' : percentage ? chartPercent(value * (percentPoints ? 1 : 100)) : chartNumber(value);
+  if (kind === 'table') return <ChartTable result={result} aliases={aliases} config={widget.config} />;
   if (kind === 'map') {
     if (widget.config.map_lookup) return <>
       <Suspense fallback={<p>Cargando mapa…</p>}><LocationMap widget={widget} result={result} aliases={aliases} /></Suspense>
@@ -79,14 +82,14 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     return <Suspense fallback={<p>Cargando mapa…</p>}><div className="generator-map"><MapsChart height="450px"
       displayMode={widget.config.map_mode || 'markers'} markers={markers} circles={circles} fitBounds highlightFormosa /></div></Suspense>;
   }
-  if (kind === 'indicator' && widget.config.indicator_text_column) {
-    return <div className="generator-indicator"><strong>{result.indicator_text ?? 'Sin datos'}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
+  if (kind === 'indicator' && (widget.config.indicator_text_column || 'indicator_text' in result)) {
+    return <div className="generator-indicator"><strong>{result.indicator_text ?? widget.config.empty_text ?? 'Sin datos'}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
   }
   if (kind === 'indicator') {
-    const value = result.datasets[0]?.data[0] ?? (widget.config.indicator_empty === 'zero' ? 0 : null);
+    const value = result.datasets[0]?.data[0] ?? (!widget.config.hide_zero && widget.config.indicator_empty === 'zero' ? 0 : null);
     const decimals = widget.config.indicator_decimals;
-    const formatted = value == null ? undefined : percentage ? metricValue(value) : value.toLocaleString('es-AR', decimals == null ? undefined : { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-    return <div className="generator-indicator"><strong>{formatted == null ? 'Sin datos' : `${formatted}${widget.config.indicator_suffix || ''}`}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
+    const formatted = widget.config.numeric_formats?.[widget.config.y_col] ? metricValue(value) : value == null ? undefined : percentage ? metricValue(value) : value.toLocaleString('es-AR', decimals == null ? undefined : { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return <div className="generator-indicator"><strong>{formatted == null ? widget.config.empty_text ?? 'Sin datos' : `${formatted}${widget.config.numeric_formats?.[widget.config.y_col] ? '' : widget.config.indicator_suffix || ''}`}</strong>{showIndicatorTitle && <span>{widget.title}</span>}</div>;
   }
   if (!result.datasets.length) return <p>No hay datos para los filtros seleccionados.</p>;
   let labels = result.labels.map(v => v == null ? 'Sin dato' : v);
@@ -117,16 +120,29 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
   const pieValues = pie ? datasets[0].data : [];
   const pieTotal = pieValues.reduce<number>((total, value) => total + (value || 0), 0);
   const pieDetails = pieValues.map(value => ({
-    value: chartNumber(value),
+    value: metricValue(value),
     percent: chartPercent(pieTotal && value != null ? value / pieTotal * 100 : 0),
   }));
   const pieInnerText = (index: number) => !pieValues[index] ? ''
     : pieLabelMode === 'value' ? pieDetails[index].value : pieDetails[index].percent;
+  const sharedFormat = widget.config.numeric_formats?.[result.datasets[0]?.metric || widget.config.y_col];
+  const sameFormats = result.datasets.every(dataset => JSON.stringify(widget.config.numeric_formats?.[dataset.metric || widget.config.y_col]) === JSON.stringify(sharedFormat));
+  const numericValues = result.datasets.flatMap(dataset => dataset.data.filter((value): value is number => value !== null && Number.isFinite(value)));
+  const low = Math.min(0, ...numericValues), high = Math.max(0, ...numericValues);
+  const tickValues = Array.from({ length: 6 }, (_, index) => low + ((high - low) || 1) * index / 5);
+  const customTicks = sharedFormat && sameFormats ? { tickmode: 'array', tickvals: tickValues, ticktext: tickValues.map(value => metricValue(value, result.datasets[0]?.metric || widget.config.y_col)) } : {};
   if (widget.library === 'ECharts') {
-    let series: any[] = datasets.map(s => ({
+    const secondMetric = widget.config.bar_labels === 'second_metric';
+    const stackPercent = kind === 'stacked' && widget.config.bar_labels === 'percent_stack';
+    const totals = labels.map((_, index) => datasets.reduce((sum, dataset) => sum + (dataset.data[index] || 0), 0));
+    let series: any[] = datasets.filter((_, index) => !secondMetric || index === 0).map(s => ({
       id: `series:${s.label}`, name: s.label,
       type: ['bar', 'horizontal', 'stacked'].includes(renderKind) ? 'bar' : renderKind === 'scatter' ? 'scatter' : 'line',
-      data: renderKind === 'scatter' ? s.data.map((v, i) => [s.x?.[i], v]) : s.data.map((value, i) => ({ name: String(labels[i]), value })),
+      data: renderKind === 'scatter' ? s.data.map((v, i) => [s.x?.[i], v]) : s.data.map((value, i) => ({ name: String(labels[i]), value: stackPercent ? totals[i] ? (value || 0) / totals[i] * 100 : 0 : value })),
+      label: { show: ['bar', 'horizontal', 'stacked'].includes(kind) && !!widget.config.bar_labels && widget.config.bar_labels !== 'none',
+        position: kind === 'stacked' ? 'inside' : kind === 'horizontal' ? 'right' : 'top', color: chartTheme.text,
+        formatter: (params: any) => stackPercent ? chartPercent(params.value) : secondMetric ? metricValue(datasets[1]?.data[params.dataIndex] ?? null, datasets[1]?.metric || widget.config.y_cols?.[0]) : metricValue(s.data[params.dataIndex], s.metric || widget.config.y_col) },
+      tooltip: { valueFormatter: (value: number) => stackPercent ? chartPercent(value) : metricValue(value, s.metric || widget.config.y_col) },
       stack: kind === 'stacked' ? 'total' : undefined,
       areaStyle: kind === 'area' ? {} : undefined, connectNulls: false, universalTransition: true,
     }));
@@ -137,7 +153,9 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
       nameTextStyle: { color: chartTheme.textSecondary },
     };
     let xAxis: any = { ...axisStyle, type: kind === 'scatter' ? 'value' : 'category', data: labels, name: xLabel, axisLabel: { ...axisStyle.axisLabel, hideOverlap: true } };
-    let yAxis: any = { ...axisStyle, type: 'value', name: yLabel, axisLabel: { ...axisStyle.axisLabel, formatter: percentage ? metricValue : undefined } };
+    const customMetrics = [...new Set(datasets.map(dataset => JSON.stringify(widget.config.numeric_formats?.[dataset.metric || widget.config.y_col] ?? null)))];
+    let yAxis: any = { ...axisStyle, type: 'value', name: yLabel, max: stackPercent ? 100 : undefined,
+      axisLabel: { ...axisStyle.axisLabel, formatter: stackPercent ? (value: number) => `${value} %` : customMetrics.length === 1 && (percentage || widget.config.numeric_formats?.[widget.config.y_col]) ? (value: number) => metricValue(value) : undefined } };
     if (kind === 'horizontal') [xAxis, yAxis] = [yAxis, xAxis];
     if (pie) {
       const radius = kind === 'donut' ? ['40%', '65%'] : '65%';
@@ -173,7 +191,7 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
       textStyle: { color: chartTheme.text, fontFamily: chartTheme.fontFamily },
       tooltip: { trigger: pie || kind === 'scatter' || kind === 'heatmap' ? 'item' : 'axis', renderMode: 'richText', backgroundColor: chartTheme.tooltipBackground, borderColor: chartTheme.border,
         textStyle: { color: chartTheme.tooltipText, fontWeight: pie ? 700 : undefined },
-        valueFormatter: percentage ? metricValue : undefined,
+        valueFormatter: percentage ? (value: number) => metricValue(value) : undefined,
         formatter: pie ? (params: any) => `${params.marker}${params.name}: ${metricValue(params.value)} (${chartPercent(params.percent)})` : undefined },
       legend: { type: 'scroll', bottom: 0, textStyle: { color: chartTheme.textSecondary } },
       grid: { left: 75, right: 35, top: 45, bottom: 85 },
@@ -187,7 +205,11 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     mode: kind === 'scatter' ? 'markers' : 'lines+markers',
     fill: kind === 'area' ? 'tozeroy' : undefined,
     marker: { color: chartTheme.colors[i % chartTheme.colors.length] }, connectgaps: false,
-    hovertemplate: percentage ? (kind === 'horizontal' ? `%{y}: %{x:${percentPoints ? '.2f' : '.2%'}}${percentPoints ? '%' : ''}<extra>%{fullData.name}</extra>` : `%{x}: %{y:${percentPoints ? '.2f' : '.2%'}}${percentPoints ? '%' : ''}<extra>%{fullData.name}</extra>`) : undefined,
+    ...(widget.config.numeric_formats?.[s.metric || widget.config.y_col] ? {
+      text: s.data.map(value => metricValue(value, s.metric || widget.config.y_col)),
+      hovertemplate: '%{text}<extra>%{fullData.name}</extra>',
+    } : {}),
+    hovertemplate: widget.config.numeric_formats?.[s.metric || widget.config.y_col] ? '%{text}<extra>%{fullData.name}</extra>' : percentage ? (kind === 'horizontal' ? `%{y}: %{x:${percentPoints ? '.2f' : '.2%'}}${percentPoints ? '%' : ''}<extra>%{fullData.name}</extra>` : `%{x}: %{y:${percentPoints ? '.2f' : '.2%'}}${percentPoints ? '%' : ''}<extra>%{fullData.name}</extra>`) : undefined,
   }));
   if (kind === 'horizontal') traces = traces.map(t => ({ ...t, x: t.y, y: t.x, orientation: 'h' }));
   if (pie) {
@@ -214,8 +236,8 @@ export default function GeneratorChart({ widget, result, showIndicatorTitle = tr
     colorway: chartTheme.colors,
     paper_bgcolor: chartTheme.paper, plot_bgcolor: chartTheme.paper,
     hoverlabel: { bgcolor: chartTheme.tooltipBackground, bordercolor: chartTheme.border, font: { color: chartTheme.tooltipText } },
-    xaxis: { title: { text: kind === 'horizontal' ? yLabel : xLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true, tickformat: percentage && kind === 'horizontal' ? percentPoints ? '.0f' : '.0%' : undefined, ticksuffix: percentPoints && kind === 'horizontal' ? '%' : undefined },
-    yaxis: { title: { text: kind === 'horizontal' ? xLabel : yLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true, tickformat: percentage && kind !== 'horizontal' ? percentPoints ? '.0f' : '.0%' : undefined, ticksuffix: percentPoints && kind !== 'horizontal' ? '%' : undefined },
+    xaxis: { ...(kind === 'horizontal' ? customTicks : {}), title: { text: kind === 'horizontal' ? yLabel : xLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true, tickformat: percentage && kind === 'horizontal' ? percentPoints ? '.0f' : '.0%' : undefined, ticksuffix: percentPoints && kind === 'horizontal' ? '%' : undefined },
+    yaxis: { ...(kind !== 'horizontal' ? customTicks : {}), title: { text: kind === 'horizontal' ? xLabel : yLabel, font: { color: chartTheme.textSecondary } }, tickfont: { color: chartTheme.textSecondary }, gridcolor: chartTheme.grid, linecolor: chartTheme.border, automargin: true, tickformat: percentage && kind !== 'horizontal' ? percentPoints ? '.0f' : '.0%' : undefined, ticksuffix: percentPoints && kind !== 'horizontal' ? '%' : undefined },
     barmode: kind === 'stacked' ? 'stack' : 'group', legend: { orientation: 'h', y: -0.25, font: { color: chartTheme.textSecondary } },
   }} config={{ responsive: true, displaylogo: false }} useResizeHandler style={{ width: '100%' }} /></Suspense>;
 }

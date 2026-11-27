@@ -54,3 +54,9 @@ export default tseslint.config({
 ```
 VITE_APP_SERVER_URL = https://localhost:3000
 ```
+
+## Generador ampliado sobre producción
+
+La [guía del generador](docs/generador-educacion-produccion.md) contiene las configuraciones de Educación, los ejemplos, la preservación de secciones existentes, el inventario de archivos y los resultados de las pruebas.
+
+El desarrollo de `codex/generador-educacion-produccion` parte exclusivamente de `feat/arreglo-componentes`. El editor conserva el documento original y envía operaciones PATCH para las ediciones explícitas; no requiere migraciones de gráficos ni fórmulas. Los gráficos nuevos utilizan ECharts y los existentes conservan su biblioteca.

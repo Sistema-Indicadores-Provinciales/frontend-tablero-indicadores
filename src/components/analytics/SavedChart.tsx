@@ -19,7 +19,7 @@ export default function SavedChart({ widget, rendered, updating = false, onRetry
     {result ? <div className="generator-chart-content">
       {!isCounter && recordCount}
       {!!result.ignored_filters?.length && <p className="generator-hint">Este gráfico no tiene los campos: {result.ignored_filters.map(column => columnLabel(column, aliases)).join(', ')}. Se aplican los demás filtros.</p>}
-      {result.filtered_rows === 0 && !(isCounter && widget.config.indicator_empty === 'zero') ? <Alert severity="info">No hay datos para los filtros seleccionados.</Alert> : <GeneratorChart widget={widget} result={result} showIndicatorTitle={!isCounter} aliases={aliases} />}
+      {result.filtered_rows === 0 && !('indicator_text' in result) && !(isCounter && widget.config.indicator_empty === 'zero') ? <Alert severity="info">No hay datos para los filtros seleccionados.</Alert> : <GeneratorChart widget={widget} result={result} showIndicatorTitle={!isCounter} aliases={aliases} />}
       {isCounter && recordCount}
       {!!result.warnings.length && <details className="generator-hint"><summary>Notas sobre los datos</summary>{result.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</details>}
     </div> : rendered?.error ? <Alert severity="error" action={onRetry && <Button onClick={onRetry}>Reintentar</Button>}>{rendered.error}</Alert>

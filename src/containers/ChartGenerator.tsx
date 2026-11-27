@@ -10,19 +10,23 @@ import GoogleConnectionPanel from 'components/analytics/GoogleConnectionPanel';
 import NavbarContext from 'contexts/NavbarContext';
 import { ChartData, ChartType, ColumnAliases, DestinationOption, FilterRule, FilterSorts, PieLabelMode, Preview, Publication, ReadConfig, SectionOptions, SortAggregation, SortConfig, Source, Widget, Workspace, chartNames } from 'types/Generator';
 import GeneratorChart from 'components/analytics/GeneratorChart';
+import CalculationDialog from 'components/analytics/CalculationDialog';
+import WidgetOptionsDialog from 'components/analytics/WidgetOptionsDialog';
 import { suggestFilterColumns } from 'utils/sectionFilters';
 import { columnLabel, defaultSort, metricColumns } from 'utils/generatorConfig';
+import { applyVisibleEdits, equalValues, readSettings, visibleWidget, workspaceEdits } from 'utils/editorDraft';
 import './chart-generator.css';
 
 const initialRead: ReadConfig = { sheet: '', header_row: 1, decimal: ',', types: {} };
 function newWidget(): Widget {
-  return { id: crypto.randomUUID(), title: 'Mi gráfico', width: 12, library: 'Plotly', config: {
+  return { id: crypto.randomUUID(), title: 'Mi gráfico', width: 12, library: 'ECharts', config: {
     ...initialRead, chart_type: 'bar', aggregation: 'count', x_col: '', y_col: '', y_cols: [], pie_label_mode: 'percent', group_col: '', date_bucket: 'none', filters: {},
     latitude_col: '', longitude_col: '', label_col: '', size_col: '', map_mode: 'markers', map_metric_cols: [],
   } };
 }
-const operations: Record<string, string> = { count: 'Contar registros', sum: 'Sumar', mean: 'Promedio', median: 'Mediana', min: 'Mínimo', max: 'Máximo', distinct: 'Contar valores distintos' };
+const operations: Record<string, string> = { count: 'Contar registros', sum: 'Sumar', mean: 'Promedio', median: 'Mediana', min: 'Mínimo', max: 'Máximo', distinct: 'Contar valores distintos', none: 'Sin agregación (un valor por categoría)' };
 const sortOperations: Record<SortAggregation, string> = {
+  mean: 'Promedio', median: 'Mediana',
   alphabetical: 'A-Z', max: 'Máximo', min: 'Mínimo', sum: 'Total (suma)', count: 'Recuento', distinct: 'Recuento diferenciado',
 };
 const sortableCharts = new Set<ChartType>(['bar', 'horizontal', 'stacked', 'line', 'area', 'pie', 'donut', 'heatmap']);
@@ -68,7 +72,11 @@ export default function ChartGenerator() {
   const [targetLoading, setTargetLoading] = useState(false), [targetError, setTargetError] = useState('');
   const [targetRetry, setTargetRetry] = useState(0);
   const loadedEdit = useRef('');
+  const original = useRef<Workspace | null>(null);
+  const sectionLoaded = useRef<Record<string, unknown>>({});
   const [saveOpen, setSaveOpen] = useState(false);
+  const [advanced, setAdvanced] = useState<{ id: string; mode: 'calculation' | 'options' } | null>(null);
+  const [ownFiltersOpen, setOwnFiltersOpen] = useState<Record<string, boolean>>({});
   const [saveError, setSaveError] = useState('');
   const [publication, setPublication] = useState<Publication | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
@@ -76,17 +84,20 @@ export default function ChartGenerator() {
   const [sourceId, setSourceId] = useState('');
   const [sheets, setSheets] = useState<string[]>([]);
   const [read, setRead] = useState<ReadConfig>(initialRead);
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [sourcePreview, setPreview] = useState<Preview | null>(null);
   const [widgetPreviews, setWidgetPreviews] = useState<Record<string, Preview>>({});
+  const [widgetReadErrors, setWidgetReadErrors] = useState<Record<string, string>>({});
   const [widgets, setWidgets] = useState<Widget[]>([newWidget()]);
   const [results, setResults] = useState<Record<string, ChartData>>({});
   const [chartErrors, setChartErrors] = useState<Record<string, string>>({});
   const [running, setRunning] = useState<Record<string, boolean>>({});
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [defaultFilters, setDefaultFilters] = useState<Record<string, string[]>>({});
-  const [readChanged, setReadChanged] = useState(false);
-  const widgetConfig = (widget: Widget) => ({ ...widget.config,
-    ...(!widget.source_id && (!widget.config.sheet || readChanged) ? read : {}),
+  const [filterSettings, setFilterSettings] = useState<Record<string, 'single' | 'multiple'>>({});
+  const [, setReadChanged] = useState(false);
+  const widgetConfig = (widget: Widget) => ({ ...visibleWidget(widget).config,
+    ...(!widget.config.sheet ? read : {}),
+    selected_filters: defaultFilters,
     // Shared restrictions are added to each chart's own restrictions, never substituted.
     filter_rules: [...(widget.config.filter_rules || []), ...Object.entries(filters).flatMap(([column, values]) =>
       values.length ? [{ column, operator: 'in' as const, value: '', values }] : [])],
@@ -104,6 +115,7 @@ export default function ChartGenerator() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState('');
   const [name, setName] = useState('Mi tablero');
+  const preview: Preview | null = sourcePreview || (workspaceId ? { columns: [], column_meta: {}, row_count: 0, preview: [], raw_preview: [], warnings: [] } : null);
   const requests = useRef<Record<string, AbortController>>({});
   const source = sources.find(s => s._id === sourceId);
   const sourceReady = !!source;
@@ -115,10 +127,9 @@ export default function ChartGenerator() {
   const visibleFilterColumns = filterColumns ?? suggestedColumns;
   const visibleLabels = allColumns.map(column => columnLabel(column, columnAliases));
   const aliasConflict = new Set(visibleLabels.map(labelKey)).size !== visibleLabels.length;
-  const headers = googleToken ? { 'X-Google-Access-Token': googleToken } : {};
+  const headers: Record<string, string> = googleToken ? { 'X-Google-Access-Token': googleToken } : {};
   const widgetRead = (widget: Widget): ReadConfig => {
-    const cfg = widgetConfig(widget);
-    return { sheet: cfg.sheet, header_row: cfg.header_row, decimal: cfg.decimal, types: cfg.types, computed_columns: cfg.computed_columns, aggregate_join: cfg.aggregate_join, google_summary: cfg.google_summary };
+    return readSettings(widgetConfig(widget));
   };
   const widgetReadKey = (widget: Widget) => JSON.stringify([widget.source_id || sourceId, widgetRead(widget)]);
   const previewRequests = JSON.stringify([...new Map(widgets.map(widget => [widgetReadKey(widget), {
@@ -127,15 +138,16 @@ export default function ChartGenerator() {
   useEffect(() => {
     const controller = new AbortController();
     setWidgetPreviews({});
+    setWidgetReadErrors({});
     const entries: { key: string; sourceId: string; read: ReadConfig }[] = JSON.parse(previewRequests);
     for (const entry of entries) {
-      if (!entry.sourceId || !entry.read.sheet) continue;
+      if (!sourcesLoaded || !entry.sourceId || !entry.read.sheet || (entry.sourceId === sourceId && !sourceReady)) continue;
       analytics.post<Preview>(`/v2/sources/${encodeURIComponent(entry.sourceId)}/preview`, entry.read, { headers, signal: controller.signal })
         .then(({ data }) => { if (!controller.signal.aborted) setWidgetPreviews(previous => ({ ...previous, [entry.key]: data })); })
-        .catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); });
+        .catch(e => { if (!controller.signal.aborted) setWidgetReadErrors(previous => ({ ...previous, [entry.key]: errorMessage(e) })); });
     }
     return () => controller.abort();
-  }, [previewRequests, googleToken, googleConnectionVersion]);
+  }, [previewRequests, sourcesLoaded, sourceReady, googleToken, googleConnectionVersion]);
   const invalidate = () => {
     Object.values(requests.current).forEach(r => r.abort()); requests.current = {};
     setResults({}); setRunning({}); setChartErrors({}); setNotice('');
@@ -163,7 +175,7 @@ export default function ChartGenerator() {
     await reloadLists();
   };
   useEffect(() => {
-    restoreSavedMenu().catch(e => setError(errorMessage(e)));
+    reloadLists().catch(e => setError(errorMessage(e)));
     changeNavTitle('Generador de gráficos');
     return () => { Object.values(requests.current).forEach(r => r.abort()); };
   }, []);
@@ -213,11 +225,11 @@ export default function ChartGenerator() {
         setPreview(data);
         const mapDefaults = mapColumnDefaults(data);
         setWidgets(prev => prev.map(w => {
-          if (w.source_id || (workspaceId && !readChanged)) return w;
+          if (w.config.sheet) return w;
           const yColumn = data.columns.includes(w.config.y_col) ? w.config.y_col : data.columns.find(c => data.column_meta[c].type === 'number') || data.columns[0];
           const additionalMetrics = [...new Set(w.config.y_cols || [])]
             .filter(column => column !== yColumn && data.columns.includes(column)).slice(0, 19);
-          return { ...w, config: { ...w.config,
+          return { ...w, source_id: w.source_id || sourceId, config: { ...w.config, ...read,
             x_col: data.columns.includes(w.config.x_col) ? w.config.x_col : data.columns[0],
             y_col: yColumn, y_cols: additionalMetrics,
             latitude_col: data.columns.includes(w.config.latitude_col || '') ? w.config.latitude_col : mapDefaults.latitude,
@@ -239,12 +251,13 @@ export default function ChartGenerator() {
     if (!workspaceId) { setWidgets([newWidget()]); setFilterColumns(null); }
     setError('');
   };
-  const changeRead = (patch: Partial<ReadConfig>) => { invalidate(); setReadChanged(true); setRead(prev => ({ ...prev, ...patch })); setFilters({}); };
+  const changeRead = (patch: Partial<ReadConfig>) => { setReadChanged(true); setRead(prev => ({ ...prev, ...patch })); };
   const patchWidget = (id: string, patch: Partial<Widget>) => {
     requests.current[id]?.abort();
     setResults(prev => { const next = { ...prev }; delete next[id]; return next; });
     setRunning(prev => ({ ...prev, [id]: false }));
-    setWidgets(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
+    setChartErrors(prev => { const next = { ...prev }; delete next[id]; return next; });
+    setWidgets(prev => prev.map(w => w.id === id ? applyVisibleEdits(w, patch) : w));
   };
   const generate = async (widget: Widget) => {
     requests.current[widget.id]?.abort();
@@ -254,7 +267,7 @@ export default function ChartGenerator() {
     try {
       const { data } = await analytics.post<ChartData>(`/v2/sources/${encodeURIComponent(widget.source_id || sourceId)}/chart`, widgetConfig(widget), { headers, signal: controller.signal });
       if (!controller.signal.aborted) setResults(prev => ({ ...prev, [widget.id]: data }));
-    } catch (e) { if (!controller.signal.aborted && !removeMissingFile(e)) setChartErrors(prev => ({ ...prev, [widget.id]: errorMessage(e) })); }
+    } catch (e) { if (!controller.signal.aborted && !((!widget.source_id || widget.source_id === sourceId) && removeMissingFile(e))) setChartErrors(prev => ({ ...prev, [widget.id]: errorMessage(e) })); }
     finally { if (!controller.signal.aborted) setRunning(prev => ({ ...prev, [widget.id]: false })); }
   };
   const upload = async (file?: File) => {
@@ -274,9 +287,10 @@ export default function ChartGenerator() {
       setSources(prev => [...prev, data]); selectSource(data._id);
     } finally { setBusy(false); }
   };
-  const save = async (savedName: string, icon: string, recipients?: string[], selectedDestination?: DestinationOption) => {
+  const save = async (savedName: string, icon?: string, recipients?: string[], selectedDestination?: DestinationOption) => {
     setBusy(true); setError(''); setSaveError('');
     let contentSaved = false;
+    const nameEdited = !!workspaceId && savedName !== sectionLoaded.current.name;
     try {
       if (aliasConflict) throw new Error('Cada columna debe tener un nombre visible diferente.');
       const target = selectedDestination || destination;
@@ -284,15 +298,37 @@ export default function ChartGenerator() {
         const alias = columnAliases[column]?.trim();
         return alias && alias !== column ? [[column, alias]] : [];
       }));
-      const savedFilterSorts = Object.fromEntries(visibleFilterColumns.map(column => [column, filterSorts[column] || defaultSort(column)]));
-      const body = { name: savedName, source_id: sourceId, filter_columns: visibleFilterColumns, column_aliases: savedAliases, filter_sorts: savedFilterSorts, filter_option_rules: filterOptionRules, default_filters: defaultFilters,
-        widgets: widgets.map(w => ({ ...w, config: widgetConfig(w) })),
+      const editedAliases = { ...(original.current?.column_aliases || {}) };
+      const loadedAliases = (sectionLoaded.current.column_aliases || {}) as ColumnAliases;
+      for (const column of new Set([...Object.keys(columnAliases), ...Object.keys(loadedAliases)])) {
+        if (columnAliases[column] === loadedAliases[column]) continue;
+        const value = columnAliases[column]?.trim();
+        if (value && value !== column) editedAliases[column] = value;
+        else delete editedAliases[column];
+      }
+      const current = { name: savedName, source_id: sourceId, filter_columns: filterColumns, column_aliases: workspaceId ? editedAliases : savedAliases, filter_sorts: filterSorts, filter_option_rules: filterOptionRules, default_filters: defaultFilters, filter_settings: filterSettings };
+      const body = { name: savedName, source_id: sourceId, filter_columns: visibleFilterColumns, column_aliases: savedAliases, filter_sorts: filterSorts, filter_option_rules: filterOptionRules, default_filters: defaultFilters, filter_settings: filterSettings,
+        widgets: widgets.map(widget => ({ ...widget, config: { ...widget.config, ...(Object.keys(filters).length ? { filter_rules: widgetConfig(widget).filter_rules } : {}) } })),
         ...(target ? { destination: { dashboardId: target.dashboardId, sectionId: target.sectionId } } : {}) };
-      const { data } = workspaceId ? await analytics.put<Workspace>(`/v2/workspaces/${workspaceId}`, body) : await analytics.post<Workspace>('/v2/workspaces', body);
+      let data: Workspace;
+      if (workspaceId) {
+        if (!original.current?.editor_revision) throw new Error('Recargá la sección para obtener su versión de edición. El borrador se conserva.');
+        const candidate = { ...original.current, widgets: body.widgets };
+        for (const key of Object.keys(current) as (keyof typeof current)[]) {
+          if (!equalValues(current[key], sectionLoaded.current[key])) Object.assign(candidate, { [key]: current[key] });
+        }
+        const changes = workspaceEdits(original.current, candidate);
+        data = changes.length ? (await analytics.patch<Workspace>(`/v2/workspaces/${workspaceId}`, { revision: original.current.editor_revision, changes }, { headers })).data : original.current;
+      } else data = (await analytics.post<Workspace>('/v2/workspaces', body, { headers })).data;
+      original.current = { ...data, ...(data.editor_document || {}) };
+      sectionLoaded.current = current;
+      setColumnAliases(current.column_aliases);
       contentSaved = true; setWorkspaceId(data._id); setName(savedName); setWidgets(data.widgets); setFilters({}); setReadChanged(false);
       if (target) setDestination(target);
       loadedEdit.current = data._id; setSearchParams({ editar: data._id }, { replace: true });
-      const linked = await analytics.put<Publication>(`/v2/workspaces/${data._id}/publication`, { icon, ...(recipients ? { recipientIds: recipients } : {}) });
+      const linked = workspaceId && !nameEdited && icon === undefined && recipients === undefined
+        ? await analytics.get<Publication>(`/v2/workspaces/${data._id}/publication`)
+        : await analytics.put<Publication>(`/v2/workspaces/${data._id}/publication`, { ...(icon !== undefined ? { icon } : {}), ...(recipients !== undefined ? { recipientIds: recipients } : {}) });
       setPublication(linked.data);
       await reloadLists(); await refreshAccessKeynames();
       setSaveOpen(false);
@@ -316,9 +352,14 @@ export default function ChartGenerator() {
         setDestination(data.destination);
       } else setDestination(null);
       loadedEdit.current = editId;
-      invalidate(); setPublication(null); setSourceId(saved.source_id); setName(saved.name); setWorkspaceId(editId); setWidgets(saved.widgets);
+      original.current = { ...saved, ...(saved.editor_document || {}) };
+      sectionLoaded.current = { name: saved.name, source_id: saved.source_id, filter_columns: saved.filter_columns ?? null,
+        column_aliases: saved.column_aliases || {}, filter_sorts: saved.filter_sorts || {}, filter_option_rules: saved.filter_option_rules || [],
+        default_filters: saved.default_filters || {}, filter_settings: saved.filter_settings || {} };
+      setFilterSettings(saved.filter_settings || {});
+      invalidate(); setPublication(null); setSourceId(saved.source_id); setName(saved.name); setWorkspaceId(editId); setWidgets(original.current.widgets);
       const cfg = saved.widgets.find(widget => !widget.source_id || widget.source_id === saved.source_id)?.config;
-      setRead(cfg ? { sheet: cfg.sheet, header_row: cfg.header_row, decimal: cfg.decimal, types: cfg.types, computed_columns: cfg.computed_columns, aggregate_join: cfg.aggregate_join, google_summary: cfg.google_summary } : initialRead);
+      setRead(cfg ? readSettings(cfg) : initialRead);
       setFilters({}); setDefaultFilters(saved.default_filters || {}); setReadChanged(false); setFilterColumns(saved.filter_columns ?? null); setColumnAliases(saved.column_aliases || {}); setFilterSorts(saved.filter_sorts || {}); setFilterOptionRules(saved.filter_option_rules || []); setNotice('Estás editando gráficos guardados. Se conservan la pestaña y las restricciones propias de cada gráfico.');
     }).catch(e => { if (!controller.signal.aborted) setTargetError(errorMessage(e)); })
       .finally(() => { if (!controller.signal.aborted) setTargetLoading(false); });
@@ -328,6 +369,8 @@ export default function ChartGenerator() {
   const move = (index: number, offset: number) => setWidgets(prev => {
     const next = [...prev]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; return next;
   });
+  const advancedWidget = widgets.find(widget => widget.id === advanced?.id);
+  const advancedColumns = advancedWidget ? widgetPreviews[widgetReadKey(advancedWidget)]?.columns || [] : [];
   return <main className="generator">
     <header className="generator-hero"><div><span className="generator-eyebrow">TUS DATOS, EN UN TABLERO</span><h1>Generador de gráficos</h1><p>Elegí tus datos, armá los gráficos y compartí el tablero desde el menú.</p></div><Icon icon="material-symbols:monitoring-rounded" width={64} /></header>
     {error && <p role="alert" className="generator-error">{error}</p>}
@@ -337,7 +380,8 @@ export default function ChartGenerator() {
     {notice && <div role="status" className="generator-notice">{notice}{publication?.canView && publication.path && <Link className="generator-link-button" to={publication.path}>{destination ? 'Ver sección' : 'Ver tablero'} <Icon icon="material-symbols:arrow-forward" width={20} /></Link>}</div>}
     <section className="generator-panel generator-controls generator-library"><div><h2>Continuar un tablero</h2><p className="generator-hint">Los tableros guardados aparecen en el menú. Abrilos aquí para editar sus gráficos y accesos.</p></div>
       <label>Tableros guardados<select value={workspaceId} onChange={e => openWorkspace(e.target.value)} disabled={busy}><option value="">Elegir tablero para editar</option>{workspaces.map(w => <option key={w._id} value={w._id}>{w.name}</option>)}</select></label>
-      <button onClick={() => restoreSavedMenu().catch(e => setError(errorMessage(e)))} disabled={busy}>Actualizar lista</button>
+      <button onClick={() => reloadLists().catch(e => setError(errorMessage(e)))} disabled={busy}>Actualizar lista</button>
+      <button onClick={() => restoreSavedMenu().catch(e => setError(errorMessage(e)))} disabled={busy}>Recuperar entradas del menú</button>
     </section>
     <section className="generator-panel"><h2>1. Fuente de datos</h2>
       <div className="generator-controls">
@@ -361,7 +405,7 @@ export default function ChartGenerator() {
         <button onClick={() => { invalidate(); setRead(prev => ({ ...prev })); }}>Actualizar datos</button>
       </div>
       {reading && <p role="status">Leyendo datos…</p>}
-      {preview && <>
+      {sourcePreview && preview && <>
         <p>{preview.row_count.toLocaleString('es-AR')} filas · {preview.columns.length} columnas. Vista previa: primeras 20 filas.</p>
         {preview.warnings.map((w, i) => <p className="generator-hint" key={i}>{w}</p>)}
         <details><summary>Ver primeras filas originales (para ubicar los encabezados)</summary><div className="generator-table"><table><tbody>{preview.raw_preview.map((r, i) => <tr key={i}><th>{i + 1}</th>{r.map((v, j) => <td key={j}>{String(v ?? '')}</td>)}</tr>)}</tbody></table></div></details>
@@ -375,7 +419,7 @@ export default function ChartGenerator() {
         </th>)}</tr></thead><tbody>{preview.preview.map((r, i) => <tr key={i}>{preview.columns.map(c => <td key={c}>{String(r[c] ?? '—')}</td>)}</tr>)}</tbody></table></div>
       </>}
     </section>}
-    {sourceReady && preview && <>
+    {(sourceReady || !!workspaceId) && preview && <>
       <section className="generator-panel"><h2>3. Filtros de la sección</h2>
         <p className="generator-hint">Elegí los campos que aparecerán arriba de la sección. Por ejemplo, Año y Mes: una selección actualizará todos los gráficos que tengan esos campos, incluidos los totales.</p>
         <Autocomplete className="filter-field-picker" multiple disableCloseOnSelect size="small" options={allColumns} value={visibleFilterColumns}
@@ -388,10 +432,16 @@ export default function ChartGenerator() {
         <Button size="small" onClick={() => setFilterColumns([])}>Quitar todos</Button>
         {!!visibleFilterColumns.length && <details className="generator-restrictions" open><summary>Orden de los valores de los filtros</summary>
           <p className="generator-hint">Cada filtro puede ordenarse usando cualquier campo de los datos y la operación elegida.</p>
-          <div className="generator-filter-sorts">{visibleFilterColumns.map(column => <SortControls key={column}
-            title={`Orden de ${columnLabel(column, columnAliases)}`} columns={allColumns} aliases={columnAliases}
-            value={filterSorts[column]} fallbackField={column}
-            onChange={sort => setFilterSorts(previous => ({ ...previous, [column]: sort }))} />)}</div>
+          <div className="generator-filter-sorts">{visibleFilterColumns.map(column => <fieldset key={column}><legend>{columnLabel(column, columnAliases)}</legend>
+            <div className="generator-controls"><label>Selección de {columnLabel(column, columnAliases)}<select value={filterSettings[column] || 'multiple'} onChange={event => setFilterSettings(previous => ({ ...previous, [column]: event.target.value as 'single' | 'multiple' }))}><option value="multiple">Múltiple</option><option value="single">Individual</option></select></label>
+              <Autocomplete multiple freeSolo options={(preview.column_meta[column]?.unique_values || []).map(String)} value={defaultFilters[column] || []}
+                onChange={(_, values) => { setDefaultFilters(previous => ({ ...previous, [column]: values })); invalidate(); }}
+                renderInput={params => <TextField {...params} label={`Valores iniciales de ${columnLabel(column, columnAliases)}`} error={filterSettings[column] === 'single' && (defaultFilters[column]?.length || 0) > 1} helperText={filterSettings[column] === 'single' ? 'Opcional: como máximo un valor.' : 'Opcional: elegir o escribir valores.'} />} />
+            </div>
+            <SortControls title={`Orden de ${columnLabel(column, columnAliases)}`} columns={allColumns} aliases={columnAliases}
+              value={filterSorts[column]} fallbackField={column}
+              onChange={sort => setFilterSorts(previous => ({ ...previous, [column]: sort }))} />
+          </fieldset>)}</div>
         </details>}
         <details className="generator-restrictions"><summary>Limitar los datos guardados{Object.values(filters).some(v => v.length) ? ' · Hay restricciones activas' : ' (opcional)'}</summary>
         <p className="generator-hint">Estas restricciones definen qué datos tendrá la sección. Los filtros de arriba solo permiten explorar dentro de este conjunto. Sin selección se incluyen todos los valores.</p><div className="generator-controls">
@@ -400,20 +450,28 @@ export default function ChartGenerator() {
       </div></details></section>
       <section className="generator-controls generator-panel">
         {destination ? <strong>{destination.dashboardName} → {destination.sectionName}</strong> : <label>Nombre del tablero<input value={name} maxLength={200} onChange={e => setName(e.target.value)} /></label>}
-        <button disabled={busy || targetLoading || !!targetError || !name.trim() || !widgets.length || aliasConflict || widgets.some(widget => !widgetPreviews[widgetReadKey(widget)])} className="generator-primary" onClick={() => { setSaveError(''); setSaveOpen(true); }}>{destination ? 'Guardar en esta sección' : 'Guardar tablero'}</button>
+        <button disabled={busy || targetLoading || !!targetError || !name.trim() || !widgets.length || aliasConflict || (!workspaceId && widgets.some(widget => !widgetPreviews[widgetReadKey(widget)]))} className="generator-primary" onClick={() => { setSaveError(''); setSaveOpen(true); }}>{destination ? 'Guardar en esta sección' : 'Guardar tablero'}</button>
         <button disabled={busy} onClick={() => { setWorkspaceId(''); setPublication(null); setDestination(null); setTargetError(''); setSearchParams({}, { replace: true }); loadedEdit.current = ''; setName(name + ' (copia)'); setNotice('Se guardará una copia. Al guardar podés elegir otra sección vacía o crear un tablero nuevo.'); }}>Guardar como nuevo</button>
-        <button disabled={widgets.length >= 30} onClick={() => {
+        <button disabled={widgets.length >= 30 || !sourcePreview} onClick={() => {
           const widget = newWidget(), mapDefaults = mapColumnDefaults(preview);
-          widget.config = { ...widget.config, x_col: preview.columns[0], y_col: preview.columns.find(c => preview.column_meta[c].type === 'number') || preview.columns[0], y_cols: [],
+          widget.source_id = sourceId;
+          widget.config = { ...widget.config, ...read, x_col: preview.columns[0], y_col: preview.columns.find(c => preview.column_meta[c].type === 'number') || preview.columns[0], y_cols: [],
             latitude_col: mapDefaults.latitude, longitude_col: mapDefaults.longitude, label_col: mapDefaults.label };
           setWidgets(previous => [...previous, widget]);
-        }}>Agregar gráfico</button>
+        }}>Agregar gráfico</button><span className="generator-hint">Para agregar de otra hoja, elegila en Revisar la lectura. Los gráficos existentes conservan su hoja.</span>
       </section>
       <div className="generator-grid">{widgets.map((w, index) => {
-        const preview = widgetPreviews[widgetReadKey(w)];
-        if (!preview) return <section className="generator-panel" key={w.id}><h3>{w.title}</h3><p>Esperando los datos de este gráfico…</p></section>;
+        w = visibleWidget(w);
+        const loadedPreview = widgetPreviews[widgetReadKey(w)];
+        const nativeColumns = loadedPreview?.columns || [];
+        const preview: Preview = { ...(loadedPreview || { columns: [], column_meta: {}, row_count: 0, preview: [], raw_preview: [], warnings: [] }),
+          columns: [...new Set([...nativeColumns, ...(w.config.calculated_fields || []).map(field => field.name)])] };
         return <section key={w.id} className="generator-panel generator-widget" style={{ gridColumn: `span ${w.width}` }}>
         <p className="generator-hint">Fuente: {sources.find(item => item._id === (w.source_id || sourceId))?.name || 'Fuente guardada'} · {widgetRead(w).sheet}</p>
+        {!loadedPreview && <p role="status">Esperando los datos correspondientes a esta fuente y hoja. Podés corregirlos en Opciones del gráfico.</p>}
+        {widgetReadErrors[widgetReadKey(w)] && <p role="alert" className="generator-error">{widgetReadErrors[widgetReadKey(w)]}</p>}
+        <div className="generator-controls generator-advanced-actions"><button type="button" onClick={() => setAdvanced({ id: w.id, mode: 'calculation' })}>Campos calculados y condiciones</button><button type="button" onClick={() => setAdvanced({ id: w.id, mode: 'options' })}>Opciones del gráfico</button></div>
+        <div className="generator-editor-layout"><div className="generator-configuration">
         <div className="generator-controls"><label>Título<input value={w.title} onChange={e => patchWidget(w.id, { title: e.target.value })} /></label><label>Ancho<select disabled={w.config.chart_type === 'indicator'} value={w.config.chart_type === 'indicator' ? 'compact' : w.width} onChange={e => patchWidget(w.id, { width: Number(e.target.value) })}>{w.config.chart_type === 'indicator' ? <option value="compact">Compacto (automático)</option> : <><option value={12}>Completo</option><option value={6}>Mitad</option></>}</select></label><button disabled={index === 0} onClick={() => move(index, -1)}>Subir</button><button disabled={index === widgets.length - 1} onClick={() => move(index, 1)}>Bajar</button><button onClick={() => { requests.current[w.id]?.abort(); setWidgets(prev => prev.filter(item => item.id !== w.id)); }}>Quitar</button></div>
         {w.config.chart_type === 'indicator' && <p className="generator-hint">En la sección, los contadores se agrupan en tarjetas compactas debajo de los filtros.</p>}
         <div className="generator-controls">
@@ -440,7 +498,7 @@ export default function ChartGenerator() {
                 disabled={column !== metric && (w.config.map_metric_cols || []).includes(column)}>{columnLabel(column, columnAliases)}</option>)}</select></label>
               <button type="button" className="generator-metric-remove" aria-label={`Quitar métrica del mapa ${metricIndex + 1}`} title="Quitar métrica"
                 onClick={() => patchWidget(w.id, { config: { ...w.config, map_metric_cols: (w.config.map_metric_cols || []).filter((_, index) => index !== metricIndex) } })}>
-                <Icon icon="material-symbols:close-rounded" width={20} />
+                <span aria-hidden="true">×</span>
               </button>
             </div>)}
             <button type="button" className="generator-add-metric" aria-label="Agregar otra métrica" title="Agregar un dato al detalle de cada punto"
@@ -449,11 +507,11 @@ export default function ChartGenerator() {
                 const reserved = new Set([w.config.latitude_col, w.config.longitude_col, w.config.label_col].filter(Boolean));
                 const next = preview.columns.find(column => !selected.has(column) && !reserved.has(column)) || preview.columns.find(column => !selected.has(column));
                 if (next) patchWidget(w.id, { config: { ...w.config, map_metric_cols: [...selected, next] } });
-              }}><Icon icon="material-symbols:add-rounded" width={20} /> Agregar métrica</button>
+              }}><span aria-hidden="true">＋</span> Agregar métrica</button>
           </> : <>
-            <label>Eje X / categoría<select value={w.config.x_col} onChange={e => patchWidget(w.id, { config: { ...w.config, x_col: e.target.value } })}>{preview.columns.map(c => <option key={c} value={c}>{columnLabel(c, columnAliases)}</option>)}</select></label>
+            <label>Eje X / categoría<select value={w.config.x_col} onChange={e => patchWidget(w.id, { config: { ...w.config, x_col: e.target.value } })}>{preview.columns.filter(column => !w.config.calculated_fields?.some(field => field.name === column && field.mode === 'aggregate')).map(c => <option key={c} value={c}>{columnLabel(c, columnAliases)}</option>)}</select></label>
             <label>Valor / eje Y<select value={w.config.y_col} onChange={e => patchWidget(w.id, { config: { ...w.config, y_col: e.target.value, y_cols: (w.config.y_cols || []).filter(column => column !== e.target.value) } })}>{preview.columns.map(c => <option key={c} value={c}>{columnLabel(c, columnAliases)}</option>)}</select></label>
-            {supportsAdditionalMetrics(w.config) && (w.config.y_cols || []).map((metric, metricIndex) => <div className="generator-metric-control" key={`${metricIndex}-${metric}`}>
+            {supportsAdditionalMetrics(w.config) && (w.config.y_cols || []).map((metric, metricIndex) => <div className="generator-metric-control" key={metricIndex}>
               <label>Métrica adicional {metricIndex + 1}<select aria-label={`Métrica adicional ${metricIndex + 1}`} value={metric} onChange={event => {
                 const next = [...(w.config.y_cols || [])]; next[metricIndex] = event.target.value;
                 patchWidget(w.id, { config: { ...w.config, y_cols: [...new Set(next)] } });
@@ -461,7 +519,7 @@ export default function ChartGenerator() {
                 disabled={column !== metric && metricColumns(w.config).includes(column)}>{columnLabel(column, columnAliases)}</option>)}</select></label>
               <button type="button" className="generator-metric-remove" aria-label={`Quitar métrica adicional ${metricIndex + 1}`} title="Quitar métrica"
                 onClick={() => patchWidget(w.id, { config: { ...w.config, y_cols: (w.config.y_cols || []).filter((_, index) => index !== metricIndex) } })}>
-                <Icon icon="material-symbols:close-rounded" width={20} />
+                <span aria-hidden="true">×</span>
               </button>
             </div>)}
             <button type="button" className="generator-add-metric" aria-label="Agregar otra métrica"
@@ -470,7 +528,7 @@ export default function ChartGenerator() {
               onClick={() => {
                 const next = preview.columns.find(column => !metricColumns(w.config).includes(column));
                 if (next) patchWidget(w.id, { config: { ...w.config, y_cols: [...(w.config.y_cols || []), next] } });
-              }}><Icon icon="material-symbols:add-rounded" width={20} /> Agregar métrica</button>
+              }}><span aria-hidden="true">＋</span> Agregar métrica</button>
             {['pie', 'donut'].includes(w.config.chart_type) && <label>Valor dentro de cada porción<select value={w.config.pie_label_mode || 'percent'}
               onChange={e => patchWidget(w.id, { config: { ...w.config, pie_label_mode: e.target.value as PieLabelMode } })}>
               <option value="percent">Porcentaje del total</option><option value="value">Valor nominal</option>
@@ -480,11 +538,11 @@ export default function ChartGenerator() {
             <label>Separar series<select value={w.config.group_col} onChange={e => patchWidget(w.id, { config: { ...w.config, group_col: e.target.value } })}><option value="">Sin separar</option>{preview.columns.map(c => <option key={c} value={c}>{columnLabel(c, columnAliases)}</option>)}</select></label>
             <label>Agrupar fechas<select value={w.config.date_bucket} onChange={e => patchWidget(w.id, { config: { ...w.config, date_bucket: e.target.value } })}><option value="none">Sin agrupar</option><option value="month">Por mes</option><option value="year">Por año</option></select></label>
           </>}
-          <button className="generator-primary" disabled={reading || running[w.id]} onClick={() => generate(w)}>{running[w.id] ? 'Generando…' : 'Generar gráfico'}</button>
+          <button className="generator-primary" disabled={!loadedPreview || running[w.id]} onClick={() => generate(w)}>{running[w.id] ? 'Generando…' : 'Generar gráfico'}</button>
         </div>
         {sortableCharts.has(w.config.chart_type) && <details className="generator-restrictions"><summary>Orden del gráfico</summary>
           <label>Cantidad máxima de categorías<input type="number" min={2} max={500} placeholder="Todas" value={w.config.category_limit ?? ''} onChange={e => patchWidget(w.id, { config: { ...w.config, category_limit: e.target.value ? Number(e.target.value) : null } })} /></label>
-          <label><input type="checkbox" checked={!!w.config.include_other} disabled={!w.config.category_limit || !['sum', 'count'].includes(w.config.aggregation)} onChange={e => patchWidget(w.id, { config: { ...w.config, include_other: e.target.checked } })} />Agrupar el resto como Otros</label>
+          <label><input type="checkbox" checked={!!w.config.include_other} disabled={!w.config.category_limit} onChange={e => patchWidget(w.id, { config: { ...w.config, include_other: e.target.checked } })} />Agrupar el resto como Otros</label>
           <SortControls title="Orden de categorías" columns={preview.columns} aliases={columnAliases} value={w.config.category_sort}
             fallbackField={w.config.x_col} onChange={sort => patchWidget(w.id, { config: { ...w.config, category_sort: sort } })} />
           {!!w.config.group_col && <SortControls title="Orden de series" columns={preview.columns} aliases={columnAliases} value={w.config.series_sort}
@@ -501,10 +559,34 @@ export default function ChartGenerator() {
           </div>)}
           <button type="button" onClick={() => patchWidget(w.id, { config: { ...w.config, filter_rules: [...(w.config.filter_rules || []), { column: preview.columns[0], operator: 'equal', value: '' }] } })}>Agregar condición</button>
         </details>
+        <details className="generator-restrictions" open={!!ownFiltersOpen[w.id]} onToggle={event => { const open = event.currentTarget.open; setOwnFiltersOpen(previous => previous[w.id] === open ? previous : { ...previous, [w.id]: open }); }}><summary>Filtros propios del gráfico</summary><p className="generator-hint">Se combinan con sus restricciones originales y los filtros de sección.</p>
+          {Object.entries(w.config.chart_filters || {}).map(([column, selection], position) => <div className="generator-controls generator-filter-row" key={position}>
+            <label>Campo del filtro propio<select value={column} onChange={event => {
+              if (w.config.chart_filters?.[event.target.value]) return;
+              patchWidget(w.id, { config: { ...w.config, chart_filters: Object.fromEntries(Object.entries(w.config.chart_filters || {}).map(([name, value]) => [name === column ? event.target.value : name, value])) } });
+            }}>{preview.columns.map(value => <option key={value}>{value}</option>)}</select></label>
+            <label>Modo del filtro propio<select value={selection.exclude ? 'exclude' : 'include'} onChange={event => patchWidget(w.id, { config: { ...w.config, chart_filters: { ...w.config.chart_filters, [column]: { [event.target.value]: selection.exclude || selection.include || [] } } } })}><option value="include">Incluir valores</option><option value="exclude">Excluir valores</option></select></label>
+            <Autocomplete multiple freeSolo size="small" options={(preview.column_meta[column]?.unique_values || []).map(String)} value={selection.exclude || selection.include || []}
+              onChange={(_, values) => patchWidget(w.id, { config: { ...w.config, chart_filters: { ...w.config.chart_filters, [column]: { [selection.exclude ? 'exclude' : 'include']: values } } } })}
+              renderInput={params => <TextField {...params} label="Valores del filtro propio" />} />
+            <button type="button" onClick={() => patchWidget(w.id, { config: { ...w.config, chart_filters: Object.fromEntries(Object.entries(w.config.chart_filters || {}).filter(([name]) => name !== column)) } })}>Quitar filtro</button>
+          </div>)}
+          <button type="button" disabled={preview.columns.every(column => column in (w.config.chart_filters || {}))} onClick={() => { const column = preview.columns.find(value => !(value in (w.config.chart_filters || {}))); if (column) patchWidget(w.id, { config: { ...w.config, chart_filters: { ...w.config.chart_filters, [column]: { include: [] } } } }); }}>Agregar filtro</button>
+        </details>
+        </div><div className="generator-live-preview" aria-label={`Vista previa de ${w.title}`}>
         {chartErrors[w.id] && <p role="alert" className="generator-error">{chartErrors[w.id]}</p>}
+        {!results[w.id] && <p className="generator-preview-empty">La vista previa se generará con la configuración vigente.</p>}
         {results[w.id] && <><h3>{w.title}</h3><p className="generator-hint">{results[w.id].filtered_rows} registros · {w.config.chart_type === 'map' ? 'Mapa' : operations[w.config.aggregation]}{['box', 'scatter', 'histogram'].includes(w.config.chart_type) ? ' (este tipo usa los valores individuales)' : ''}</p>{results[w.id].warnings.map((v, i) => <p className="generator-hint" key={i}>{v}</p>)}<GeneratorChart widget={w} result={results[w.id]} aliases={columnAliases} /></>}
+        </div></div>
       </section>; })}</div>
     </>}
     <SaveDashboardDialog open={saveOpen} workspaceId={workspaceId} name={name} destination={destination} busy={busy} error={saveError} count={widgets.length} onClose={() => setSaveOpen(false)} onSave={save} />
+    {advancedWidget && advanced?.mode === 'calculation' && <CalculationDialog open widget={visibleWidget(advancedWidget)} columns={advancedColumns}
+      sourceName={advancedWidget.source_id || sourceId} sourceLabel={sources.find(source => source._id === (advancedWidget.source_id || sourceId))?.name} config={widgetConfig(advancedWidget)} headers={headers}
+      copies={[...widgets.filter(widget => widget.id !== advancedWidget.id).map(widget => ({ label: widget.title, widget })),
+        ...workspaces.flatMap(workspace => workspace.widgets.map(widget => ({ label: `${workspace.name} · ${widget.title}`, widget })))].filter(item => !!item.widget.config.calculated_fields?.length)}
+      onClose={() => setAdvanced(null)} onApply={config => patchWidget(advancedWidget.id, { config })} />}
+    {advancedWidget && advanced?.mode === 'options' && <WidgetOptionsDialog open widget={visibleWidget(advancedWidget)} sourceId={sourceId} sources={sources} columns={advancedColumns} headers={headers}
+      onClose={() => setAdvanced(null)} onApply={widget => patchWidget(advancedWidget.id, widget)} />}
   </main>;
 }

@@ -8,9 +8,10 @@ import { columnLabel } from 'utils/generatorConfig';
 
 const searchable = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 
-function FilterControl({ column, displayName, options, selection, loading, onChange }: {
+function FilterControl({ column, displayName, options, selection, loading, onChange, single = false }: {
   column: string; displayName: string; options?: FilterOptions[string]; selection?: SectionFilterSelection; loading: boolean;
   onChange: (selection?: SectionFilterSelection) => void;
+  single?: boolean;
 }) {
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -35,6 +36,9 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
   const active = !!mode;
 
   const toggleValue = (value: string) => {
+    if (single) {
+      onChange({ mode: 'include', values: [value] }); close(); return;
+    }
     if (pendingAll) {
       onChange({ mode: 'include', values: [value] });
       setPendingAll(false);
@@ -72,6 +76,7 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
 
   const addCustom = () => {
     if (!canAddCustom || !custom) return;
+    if (single) { onChange({ mode: 'include', values: [custom] }); close(); return; }
     if (!mode || pendingAll) onChange({ mode: 'include', values: [custom] });
     else if (mode === 'include' && !selectedValues.includes(custom) && selectedValues.length < 100) {
       onChange({ mode: 'include', values: [...selectedValues, custom] });
@@ -109,12 +114,12 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
           inputProps={{ 'aria-label': `Buscar en ${displayName}`, maxLength: 2000 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <FormControlLabel control={<Checkbox size="small" checked={pendingAll ? false : allSelected}
+          {!single && <FormControlLabel control={<Checkbox size="small" checked={pendingAll ? false : allSelected}
             indeterminate={!pendingAll && active && !allSelected} onChange={() => {
               if (pendingAll) { onChange(); setPendingAll(false); }
               else if (allSelected) setPendingAll(true);
               else { onChange(); setPendingAll(false); }
-            }} />} label={<Typography fontSize={13}>Todos</Typography>} />
+            }} />} label={<Typography fontSize={13}>Todos</Typography>} />}
           <Typography fontSize={11} color="text.secondary">
             {pendingAll ? 'Elegí al menos un valor' : !active ? 'Sin restricciones' : mode === 'exclude' ? `${selectedValues.length} excluidos` : `${selectedValues.length} seleccionados`}
           </Typography>
@@ -124,7 +129,7 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
       {loading && <Typography role="status" fontSize={12} color="text.secondary" sx={{ px: 1.5, py: 1 }}>Actualizando opciones…</Typography>}
       <Box component="ul" aria-label={`Valores de ${displayName}`} sx={{ listStyle: 'none', p: .5, m: 0, overflowY: 'auto', minHeight: 0 }}>
         {shown.map(value => {
-          const checked = pendingAll ? false : mode === 'exclude' ? !selectedValues.includes(value) : mode === 'include' ? selectedValues.includes(value) : true;
+          const checked = single ? mode === 'include' && selectedValues.includes(value) : pendingAll ? false : mode === 'exclude' ? !selectedValues.includes(value) : mode === 'include' ? selectedValues.includes(value) : true;
           const adding = pendingAll || !mode || !selectedValues.includes(value);
           return <Box component="li" key={value} sx={{ display: 'flex', alignItems: 'center', px: 1, '&:hover': { bgcolor: 'action.hover' } }}>
             <FormControlLabel sx={{ m: 0, flex: 1, minWidth: 0, '.MuiFormControlLabel-label': { minWidth: 0 } }}
@@ -152,8 +157,9 @@ function FilterControl({ column, displayName, options, selection, loading, onCha
   </>;
 }
 
-export default function SectionFilterBar({ columns, options, values, loading, onChange, aliases }: {
+export default function SectionFilterBar({ columns, options, values, loading, onChange, aliases, settings }: {
   columns: string[]; options: FilterOptions; values: SectionFilters; loading: boolean; aliases?: ColumnAliases; onChange: (values: SectionFilters) => void;
+  settings?: Record<string, 'single' | 'multiple'>;
 }) {
   const update = (column: string, selection?: SectionFilterSelection) => {
     const next = { ...values };
@@ -163,7 +169,7 @@ export default function SectionFilterBar({ columns, options, values, loading, on
   };
   return <Box component="section" aria-label="Filtros de la sección" className="section-filter-bar">
     <div className="section-filter-controls">
-      {columns.map(column => <FilterControl key={column} column={column} displayName={columnLabel(column, aliases)} options={options[column]} selection={values[column]} loading={loading}
+      {columns.map(column => <FilterControl key={column} column={column} single={settings?.[column] === 'single'} displayName={columnLabel(column, aliases)} options={options[column]} selection={values[column]} loading={loading}
         onChange={selection => update(column, selection)} />)}
     </div>
     <Button className="section-filter-clear" size="small" variant="contained" onClick={() => onChange({})}>Limpiar filtros</Button>

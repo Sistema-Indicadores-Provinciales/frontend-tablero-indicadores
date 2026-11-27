@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { applyEditorChanges, editorResponse } from './editorTestApi';
 
 const config = { sheet: 'Datos', header_row: 1, decimal: ',', types: {}, chart_type: 'indicator', aggregation: 'sum', x_col: 'Total', y_col: 'Total', group_col: '', date_bucket: 'none', filters: {} };
 const counters = ['Total intervenciones', 'Por mes', 'Por tipo', 'Otra hoja'].map((title, index) => ({ id: String(index), title, width: 6, library: 'Plotly',
@@ -35,8 +36,8 @@ async function setup(page: Page, legacy = false, contextual = false) {
     else if (path === '/v2/workspaces/restore-menu') data = { restored: 0 };
     else if (path === '/v2/workspaces') data = [state.workspace];
     else if (path === '/v2/workspaces/saved') {
-      if (req.method() === 'PUT') { state.saves.push(req.postDataJSON()); state.workspace = { _id: 'saved', ...req.postDataJSON() }; }
-      data = state.workspace;
+      if (req.method() === 'PATCH') { state.workspace = applyEditorChanges(state.workspace, req.postDataJSON()); state.saves.push(structuredClone(state.workspace)); }
+      data = editorResponse(state.workspace);
     }
     else if (path === '/v2/workspaces/saved/view') data = { ...state.workspace, can_edit: true, source_kind: 'upload' };
     else if (path.endsWith('/publication')) data = { canShare: false, canView: true, currentUserId: 'owner', users: [], recipientIds: [], show: true, path: '/educacion/intervenciones' };
@@ -390,4 +391,19 @@ test('search, multiple selections and Solamente work in dark mode and the popup 
   await expect(popup).toBeVisible();
   await popup.getByRole('textbox', { name: 'Buscar en Mes' }).press('Escape');
   await expect(popup).toHaveCount(0);
+});
+
+test('single selection replaces a default and clearing keeps the filter empty after refresh', async ({ page }) => {
+  const state = await setup(page);
+  Object.assign(state.workspace, { filter_settings: { Año: 'single' }, default_filters: { Año: ['2026'] } });
+  await page.goto('/educacion/intervenciones');
+  await expect.poll(() => state.requests.at(-1)?.filters).toEqual({ Año: ['2026'] });
+  await page.getByRole('button', { name: 'Filtrar por Año', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Filtrar por Año', exact: true }).getByRole('checkbox', { name: '2025', exact: true }).check();
+  await expect.poll(() => state.requests.at(-1)?.filters).toEqual({ Año: ['2025'] });
+  await expect(page.getByRole('dialog', { name: 'Filtrar por Año', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Limpiar filtros', exact: true }).click();
+  await expect.poll(() => state.requests.at(-1)?.filters).toEqual({});
+  await page.getByRole('button', { name: 'Actualizar datos', exact: true }).click();
+  await expect.poll(() => state.requests.at(-1)?.filters).toEqual({});
 });

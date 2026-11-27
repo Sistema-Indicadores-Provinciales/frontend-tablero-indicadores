@@ -12,7 +12,7 @@ const icons = [
 interface Props {
   open: boolean; workspaceId: string; name: string; busy: boolean; error: string; count: number;
   destination?: DestinationOption | null;
-  onClose: () => void; onSave: (name: string, icon: string, recipients?: string[], destination?: DestinationOption) => Promise<void>;
+  onClose: () => void; onSave: (name: string, icon?: string, recipients?: string[], destination?: DestinationOption) => Promise<void>;
 }
 
 export default function SaveDashboardDialog({ open, workspaceId, name, busy, error, count, destination, onClose, onSave }: Props) {
@@ -94,7 +94,10 @@ export default function SaveDashboardDialog({ open, workspaceId, name, busy, err
     </DialogContent>
     <DialogActions sx={{ px: 3, pb: 3 }}>
       <Button disabled={busy} onClick={onClose}>Cancelar</Button>
-      <Button variant="contained" disabled={busy || choosing || !!loadError || !options || !title.trim()} onClick={() => onSave(target?.sectionName || title.trim(), icon, options?.canShare ? recipients : undefined, target || undefined)}>{busy ? 'Guardando…' : 'Guardar y aplicar accesos'}</Button>
+      <Button variant="contained" disabled={busy || choosing || !!loadError || !options || !title.trim()} onClick={() => onSave(target?.sectionName || title.trim(),
+        workspaceId && options?.published && icon === (options?.icon || icons[0][0]) ? undefined : icon,
+        options?.canShare && (!workspaceId || !options.published || JSON.stringify(recipients) !== JSON.stringify(options.recipientIds)) ? recipients : undefined,
+        target || undefined)}>{busy ? 'Guardando…' : 'Guardar y aplicar accesos'}</Button>
     </DialogActions>
   </Dialog>;
 }

@@ -155,7 +155,7 @@ function SectionDashboard({ workspaceId, title, dashboardName, dashboardPath }: 
     {(workspace?.requires_google || workspace?.source_kind === 'google') && (workspace.source_access_mode === 'public' && !workspace.requires_google
       ? <p className="generator-hint">Google Sheets · Los datos se leen al entrar o al usar Actualizar datos.</p>
       : <GoogleConnectionPanel token={googleToken} onToken={setGoogleToken} onConnectionChange={handleConnectionChange} busy={busy} />)}
-    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} aliases={workspace.column_aliases} />}
+    {workspace && columns.length > 0 && <SectionFilterBar columns={columns} options={filterOptions} values={activeFilters} loading={rendering} onChange={setFilters} aliases={workspace.column_aliases} settings={workspace.filter_settings} />}
     {counters.length > 0 && <section className="generator-counters" aria-label="Contadores de la sección">{counters.map(renderWidget)}</section>}
     {charts.length > 0 && <div className="generator-grid">{charts.map(renderWidget)}</div>}
   </main>;

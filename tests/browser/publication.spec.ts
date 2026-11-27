@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { applyEditorChanges, editorResponse } from './editorTestApi';
 
 const widget = { id: 'chart', title: 'Total de ingresos', width: 12, library: 'Plotly', config: {
   sheet: 'Datos', header_row: 1, decimal: ',', types: {}, chart_type: 'indicator', aggregation: 'sum', x_col: 'Mes', y_col: 'Valor', group_col: '', date_bucket: 'none', filters: {},
@@ -28,8 +29,8 @@ async function mockSystem(page: Page, { old = false, viewer = false, failPublish
       else { if (method === 'PUT') { state.published = true; state.recipients = route.request().postDataJSON().recipientIds ?? state.recipients; } data = options(); }
     }
     else if (path === '/v2/workspaces' || path === '/v2/workspaces/saved') {
-      if (method !== 'GET') { state.saves++; state.workspaces = [{ _id: 'saved', ...route.request().postDataJSON() }]; }
-      data = path.endsWith('/saved') || method !== 'GET' ? state.workspaces[0] : state.workspaces;
+      if (method !== 'GET') { state.saves++; state.workspaces = [method === 'PATCH' ? applyEditorChanges(state.workspaces[0], route.request().postDataJSON()) : { _id: 'saved', ...route.request().postDataJSON() }]; }
+      data = path.endsWith('/saved') || method !== 'GET' ? editorResponse(state.workspaces[0]) : state.workspaces;
     }
     else if (path === '/v2/workspaces/saved/view') {
       if (state.revoked) { status = 404; data = { detail: 'El tablero no está disponible o no tenés acceso.' }; }
@@ -96,6 +97,7 @@ test('save, choose viewers, open from menu and reload the direct link', async ({
 test('previous saved workspaces are recovered into the same menu without recreating charts', async ({ page }) => {
   const state = await mockSystem(page, { old: true });
   await page.goto('/generador');
+  await page.getByRole('button', { name: 'Recuperar entradas del menú' }).click();
   await expect(page.getByRole('status')).toContainText('1 tablero recuperado');
   await page.getByRole('button', { name: 'Abrir menú' }).click();
   await page.getByRole('button', { name: 'Ingresos semanales', exact: true }).click();

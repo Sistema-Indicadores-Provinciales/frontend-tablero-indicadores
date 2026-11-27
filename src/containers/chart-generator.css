@@ -22,6 +22,37 @@
 .generator-column-source { display: block; max-width: 220px; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; font-size: 10px; font-weight: 400; color: var(--app-text-secondary); }
 .generator-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
 .generator-widget { margin: 0; }
+.generator:not(.saved-dashboard) .generator-widget { container-type: inline-size; border-top: 3px solid var(--app-primary); }
+.generator-editor-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 22px; margin-top: 18px; align-items: start; }
+.generator-configuration, .generator-live-preview { min-width: 0; }
+.generator-live-preview { border: 1px solid var(--app-border); border-radius: 10px; padding: 16px; background: var(--app-elevated); }
+.generator-preview-empty { display: grid; place-items: center; min-height: 230px; text-align: center; color: var(--app-text-secondary); font-size: 13px; }
+.generator-advanced-actions { justify-content: flex-start; padding-bottom: 14px; border-bottom: 1px solid var(--app-border); }
+.generator .generator-advanced-actions button { color: var(--app-primary); background: var(--app-elevated); }
+.generator .generator-controls > .MuiAutocomplete-root { flex: 1 1 220px; min-width: 0; max-width: 100%; }
+.generator .generator-controls > button:not(.MuiButtonBase-root) { flex: 0 1 auto; min-height: 40px; box-sizing: border-box; white-space: normal; }
+.generator .generator-metric-control { align-self: end; }
+.generator .generator-add-metric, .generator .generator-metric-remove { height: 40px; min-height: 40px; box-sizing: border-box; }
+.generator input:not(.MuiInputBase-input), .generator select { min-width: 0; box-sizing: border-box; height: 40px; }
+.generator input[type="checkbox"]:not(.MuiInputBase-input) { width: 17px; height: 17px; min-height: 17px; margin: 0; flex-shrink: 0; }
+.generator label.generator-check { flex-direction: row; align-items: center; gap: 8px; min-height: 40px; }
+.generator fieldset { border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; margin: 16px 0; min-width: 0; }
+.generator legend { color: var(--app-text-secondary); font-size: 13px; font-weight: 600; padding: 0 6px; }
+.generator textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--app-control-border); background: var(--app-paper); color: var(--app-text); border-radius: 6px; padding: 12px; font: 13px/1.5 Consolas, monospace; resize: vertical; }
+.generator-lab { padding: 8px 0; max-width: none; }
+.generator-lab > label, .generator-lab details > label, .generator-lab fieldset > label { max-width: none !important; margin: 14px 0; }
+.generator-result-control { display: flex; align-items: end; gap: 10px; flex: 1 1 240px; min-width: 0; }
+.generator-result-control > label { min-width: 0; }
+.generator-filter-row { padding: 12px; background: var(--app-elevated); border-radius: 8px; margin: 12px 0; }
+@container (max-width: 850px) { .generator-editor-layout { grid-template-columns: minmax(0, 1fr); } }
+@media(max-width: 600px) {
+  .generator .generator-controls { gap: 10px; }
+  .generator .generator-controls > label { max-width: none; flex-basis: 100%; }
+  .generator .generator-advanced-actions > button { flex: 1 1 100%; }
+  .generator-result-control { flex-wrap: wrap; }
+  .generator .generator-lab { padding: 0; }
+  .generator-live-preview { padding: 10px; }
+}
 .generator-indicator { padding: 50px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
 .generator-indicator strong { font-size: 48px; color: var(--app-secondary); }
 @media(max-width: 900px) { .generator-widget:not(.generator-counter) { grid-column: span 12 !important; } .generator { padding: 12px; } }

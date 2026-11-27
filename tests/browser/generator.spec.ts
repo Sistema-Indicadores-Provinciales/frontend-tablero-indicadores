@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { editorResponse } from './editorTestApi';
 const preview = {
   columns: ['Mes', 'Valor'], column_meta: { Mes: { type: 'number', unique_values: [1, 2, 3], unique_count: 3, missing: 0, invalid: 0 }, Valor: { type: 'number', unique_values: [0, 10, 5], unique_count: 3, missing: 0, invalid: 0 } },
   row_count: 3, preview: [{ Mes: 1, Valor: 0 }, { Mes: 2, Valor: 10 }, { Mes: 3, Valor: 5 }], raw_preview: [['Mes', 'Valor'], [1, 0], [2, 10]], warnings: [],
@@ -12,10 +13,10 @@ test.beforeEach(async ({ page }) => {
     if (path === '/v2/workspaces/restore-menu') data = { restored: 0 };
     else if (path === '/v2/google/status') data = { client_id: '', public_access: false };
     else if (path === '/v2/publication-options' || path.endsWith('/publication')) data = { published: path.endsWith('/publication'), canShare: false, currentUserId: 'test', canView: true, users: [], recipientIds: [], path: '/tablero-semanal/graficos', show: true };
-    else if (path === '/v2/workspaces/saved') data = saved[0];
+    else if (path === '/v2/workspaces/saved') data = editorResponse(saved[0]);
     else if (path === '/v2/sources') data = [{ _id: 'test-source', name: 'Prueba.csv', kind: 'upload' }];
     else if (path === '/v2/workspaces' && route.request().method() === 'GET') data = saved;
-    else if (path === '/v2/workspaces') { data = { _id: 'saved', ...route.request().postDataJSON() }; saved.push(data); }
+    else if (path === '/v2/workspaces') { const workspace = { _id: 'saved', ...route.request().postDataJSON() }; saved.push(workspace); data = editorResponse(workspace); }
     else if (path.endsWith('/sheets')) data = ['Datos'];
     else if (path.endsWith('/preview')) data = preview;
     else if (path.endsWith('/chart')) {
@@ -29,6 +30,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Generador de gráficos' })).toBeVisible();
   await page.getByLabel('Archivos disponibles').selectOption('test-source');
   await expect(page.getByText('3 filas · 2 columnas.', { exact: false })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Presentación', exact: true }).selectOption('Plotly');
 });
 
 test('all chart types render in both libraries', async ({ page }) => {
@@ -128,7 +130,8 @@ test('editing preserves each chart source, sheet, numeric parsing and individual
     config: { sheet: 'CAUSAS', header_row: 2, decimal: ',', types: { TOTAL: 'number' }, chart_type: 'indicator', x_col: 'AÑO', y_col: 'TOTAL', aggregation: 'sum',
       computed_columns: { Causa: [{ column: 'CAUSA', case: 'lower' }] }, filters: {}, filter_rules: [{ column: 'GENERO', operator: 'equal', value: 'Masculino' }] } };
   const workspace = { _id: 'migration', name: 'Salud', source_id: 'test-source', widgets: [population, deaths], filter_columns: ['AÑO', 'Causa'], filter_option_rules: [{ column: 'CAUSA', operator: 'not_contains', value: 'TASA' }], default_filters: { AÑO: ['2025'] }, column_aliases: { POBLACION: 'Habitantes', Causa: 'Causa normalizada' } };
-  await page.route('**/v2/workspaces/migration', async route => route.fulfill({ json: route.request().method() === 'GET' ? workspace : { ...workspace, ...route.request().postDataJSON() } }));
+  const writes: unknown[] = [];
+  await page.route('**/v2/workspaces/migration', async route => { if (route.request().method() !== 'GET') writes.push(route.request().postDataJSON()); return route.fulfill({ json: editorResponse(workspace) }); });
   await page.route('**/v2/sources/*/preview', route => {
     const isPopulation = route.request().url().includes('/population-source/');
     const columns = isPopulation ? ['AÑO', 'POBLACION'] : ['AÑO', 'TOTAL', 'GENERO', 'CAUSA', 'Causa'];
@@ -144,15 +147,10 @@ test('editing preserves each chart source, sheet, numeric parsing and individual
   await page.getByRole('button', { name: 'Generar gráfico', exact: true }).first().click();
   expect((await generation).postDataJSON()).toMatchObject(population.config);
   await expect(page.locator('.generator-indicator strong')).toHaveText('617.334');
-  const saving = page.waitForRequest(r => r.url().endsWith('/workspaces/migration') && r.method() === 'PUT');
   await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
   await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
-  const body = (await saving).postDataJSON();
-  expect(body.widgets[0]).toMatchObject(population);
-  expect(body.widgets[1]).toMatchObject(deaths);
-  expect(body.default_filters).toEqual({ AÑO: ['2025'] });
-  expect(body.column_aliases).toMatchObject(workspace.column_aliases);
-  expect(body.filter_option_rules).toEqual(workspace.filter_option_rules);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(writes).toEqual([]);
 });
 
 test('migrated indicators preserve formulas, published text and percentage formatting when saved', async ({ page }) => {
@@ -174,7 +172,8 @@ test('migrated indicators preserve formulas, published text and percentage forma
       category_limit: 20, include_other: true, category_sort: { field: 'Valor', aggregation: 'max', direction: 'desc', tie_breaker: 'source_heap' } } },
   ];
   const workspace = { _id: 'formulas', source_id: 'test-source', name: 'Fórmulas de Salud', widgets, filter_columns: ['Mes'] };
-  await page.route('**/v2/workspaces/formulas', route => route.fulfill({ json: route.request().method() === 'GET' ? workspace : { ...workspace, ...route.request().postDataJSON() } }));
+  const writes: unknown[] = [];
+  await page.route('**/v2/workspaces/formulas', route => { if (route.request().method() !== 'GET') writes.push(route.request().postDataJSON()); return route.fulfill({ json: editorResponse(workspace) }); });
   await page.route('**/v2/sources/test-source/chart', route => route.fulfill({ json: route.request().postDataJSON().indicator_text_column
     ? { labels: [], datasets: [], indicator_text: '7,30%', filtered_rows: 1, warnings: [] }
     : { labels: ['Total'], datasets: [{ label: 'Total', data: [route.request().postDataJSON().value_format === 'percent' ? 0.9618 : 37.15360091555628] }], filtered_rows: 1, warnings: [] } }));
@@ -189,11 +188,10 @@ test('migrated indicators preserve formulas, published text and percentage forma
   await page.getByRole('button', { name: 'Generar gráfico', exact: true }).nth(7).click();
   await expect(page.locator('.js-plotly-plot')).toBeVisible();
   await expect(page.locator('.ytick')).toContainText(['%']);
-  const saving = page.waitForRequest(r => r.url().endsWith('/workspaces/formulas') && r.method() === 'PUT');
   await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
   await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
-  const body = (await saving).postDataJSON();
-  widgets.forEach((widget, index) => expect(body.widgets[index]).toMatchObject(widget));
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(writes).toEqual([]);
 });
 
 test('pie charts keep category labels outside and values inside each slice', async ({ page }) => {
@@ -256,7 +254,8 @@ test('verified maps retain their catalogue and expose unmatched values without i
     filter_rules: [{ column: 'Valor', operator: 'not_equal', value: '0' }] };
   const workspace = { _id: 'verified-map', name: 'Mapa de Salud', source_id: 'test-source', filter_columns: ['Mes'],
     widgets: [{ id: 'map', title: 'Casos por localidad', width: 12, library: 'ECharts', config }] };
-  await page.route('**/v2/workspaces/verified-map', route => route.fulfill({ json: route.request().method() === 'GET' ? workspace : { ...workspace, ...route.request().postDataJSON() } }));
+  const writes: unknown[] = [];
+  await page.route('**/v2/workspaces/verified-map', route => { if (route.request().method() !== 'GET') writes.push(route.request().postDataJSON()); return route.fulfill({ json: editorResponse(workspace) }); });
   // An unmatched selection must remain inspectable even if the map provider is unavailable.
   await page.route('**/maps.googleapis.com/**', route => route.abort());
   await page.route('**/v2/sources/test-source/chart', route => route.fulfill({ json: {
@@ -271,8 +270,8 @@ test('verified maps retain their catalogue and expose unmatched values without i
   await expect(page.getByText('0 ubicaciones verificadas · 1 grupos sin ubicación puntual')).toBeVisible();
   await page.getByText('Ver detalle por ubicación', { exact: true }).click();
   await expect(page.getByRole('row', { name: 'Pendiente 7', exact: true })).toBeVisible();
-  const saving = page.waitForRequest(r => r.url().endsWith('/workspaces/verified-map') && r.method() === 'PUT');
   await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
   await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
-  expect((await saving).postDataJSON().widgets[0].config).toMatchObject(config);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(writes).toEqual([]);
 });

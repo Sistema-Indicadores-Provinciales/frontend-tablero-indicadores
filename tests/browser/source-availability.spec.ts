@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { applyEditorChanges, editorResponse } from './editorTestApi';
 
 const file = { _id: 'file', name: 'Disponible.csv', kind: 'upload' };
 const sheet = { _id: 'google', name: 'Hoja privada', kind: 'google' };
@@ -20,8 +21,8 @@ async function setup(page: Page) {
     else if (path === '/v2/google/status') data = { client_id: '', public_access: true };
     else if (path === '/v2/workspaces') data = [state.workspace];
     else if (path === '/v2/workspaces/saved') {
-      if (request.method() === 'PUT') { state.saves.push(request.postDataJSON()); state.workspace = { _id: 'saved', ...request.postDataJSON() }; }
-      data = state.workspace;
+      if (request.method() === 'PATCH') { state.workspace = applyEditorChanges(state.workspace, request.postDataJSON()); state.saves.push(structuredClone(state.workspace)); }
+      data = editorResponse(state.workspace);
     }
     else if (path.endsWith('/publication') || path === '/v2/publication-options') data = { canShare: false, currentUserId: 'test', canView: true, users: [], recipientIds: [], path: '/conservado/graficos', show: true };
     else if (/\/v2\/sources\/[^/]+\/(sheets|preview|chart)$/.test(path)) {
@@ -91,7 +92,7 @@ test('missing saved source can be replaced without losing chart settings or filt
   await page.getByLabel('Subir archivo', { exact: true }).setInputFiles({ name: 'Recuperado.csv', mimeType: 'text/csv', buffer: Buffer.from('Mes,Valor\n1,10') });
   await expect(page.getByLabel('Nombre del tablero')).toHaveValue('Tablero conservado');
   await expect(page.getByRole('combobox', { name: 'Tipo de gráfico', exact: true })).toHaveValue('indicator');
-  await expect(page.getByLabel('Mes', { exact: true })).toHaveValue('1');
+  await expect(page.locator('.generator-widget').getByLabel('Mes', { exact: true })).toHaveValue('1');
   await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
   await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
   await expect(page.getByText('Tablero guardado. Ya aparece', { exact: false })).toBeVisible();

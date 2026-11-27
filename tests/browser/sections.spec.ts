@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { applyEditorChanges, editorResponse } from './editorTestApi';
 
 const did = 'a'.repeat(24), sid = 'b'.repeat(24);
 async function system(page: Page, { emptySection = false, guest = false } = {}) {
@@ -34,8 +35,8 @@ async function system(page: Page, { emptySection = false, guest = false } = {}) 
     }
     else if (path === '/v2/workspaces/restore-menu') data = { restored: 0 };
     else if (path === '/v2/workspaces' || path === '/v2/workspaces/saved') {
-      if (method === 'POST' || method === 'PUT') { state.saves.push(request.postDataJSON()); state.workspace = { ...state.workspace, _id: 'saved', ...request.postDataJSON() }; }
-      data = method === 'GET' && path === '/v2/workspaces' ? state.workspace ? [state.workspace] : [] : state.workspace;
+      if (method === 'POST' || method === 'PATCH') { state.workspace = method === 'PATCH' ? applyEditorChanges(state.workspace, request.postDataJSON()) : { ...state.workspace, _id: 'saved', ...request.postDataJSON() }; state.saves.push(structuredClone(state.workspace)); }
+      data = method === 'GET' && path === '/v2/workspaces' ? state.workspace ? [state.workspace] : [] : editorResponse(state.workspace);
     }
     else if (path === '/v2/workspaces/saved/view') data = { ...state.workspace, can_edit: !guest, source_kind: state.workspace?.source_id === 'google-source' ? 'google' : 'upload', source_access_mode: state.workspace?.source_id === 'google-source' ? 'public' : undefined };
     else if (path === '/v2/workspaces/saved/render') {

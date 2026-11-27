@@ -5,7 +5,9 @@ export const chartNames = {
 };
 export type ChartType = keyof typeof chartNames;
 export type Scalar = string | number | boolean | null;
-export type SortAggregation = 'alphabetical' | 'sum' | 'max' | 'min' | 'count' | 'distinct';
+export interface CalculatedField { name: string; expression: string; mode: 'row' | 'aggregate'; guide?: Record<string, unknown>; }
+export interface NumericFormat { style: 'number' | 'percent' | 'literal'; decimals: number; grouping: boolean; prefix: string; suffix: string; empty: string; decimal_separator?: ',' | '.'; thousands_separator?: ',' | '.' | ' '; }
+export type SortAggregation = 'alphabetical' | 'sum' | 'mean' | 'median' | 'max' | 'min' | 'count' | 'distinct';
 export type SortDirection = 'asc' | 'desc';
 export type PieLabelMode = 'percent' | 'value';
 export interface SortConfig { field: string; aggregation: SortAggregation; direction: SortDirection; tie_order?: string[]; tie_breaker?: 'alphabetical' | 'source_heap'; }
@@ -18,6 +20,16 @@ export interface GoogleSummary { dimensions: string[]; counts: Record<string, st
 export interface ReadConfig { sheet: string; header_row: number; decimal: string; types: Record<string, string>; computed_columns?: Record<string, TextPart[]>; aggregate_join?: AggregateJoin | null; google_summary?: GoogleSummary | null; }
 export interface FilterRule { column: string; operator: 'equal' | 'not_equal' | 'contains' | 'not_contains' | 'empty' | 'not_empty' | 'in' | 'greater_equal'; value: string; values?: string[]; }
 export interface ChartConfig extends ReadConfig {
+  calculated_fields?: CalculatedField[];
+  display_condition?: { expression: string; alternative?: string } | null;
+  numeric_formats?: Record<string, NumericFormat>;
+  empty_text?: string;
+  hide_zero?: boolean;
+  chart_filters?: Record<string, { include?: string[]; exclude?: string[] }>;
+  selected_filters?: Record<string, string[] | { exclude: string[] }>;
+  table_columns?: string[] | null;
+  table_unique?: boolean;
+  bar_labels?: 'none' | 'value' | 'second_metric' | 'percent_stack';
   chart_type: ChartType; aggregation: string; x_col: string; y_col: string; group_col: string;
   y_cols?: string[];
   pie_label_mode?: PieLabelMode;
@@ -48,6 +60,7 @@ export interface Preview {
 export interface ChartData {
   labels: Scalar[]; datasets: { label: string; data: (number | null)[]; x?: Scalar[]; metric?: string; group?: string }[];
   indicator_text?: string | null;
+  display_hidden?: boolean;
   filtered_rows: number; warnings: string[]; columns?: string[]; records?: Record<string, Scalar>[];
   map_points?: { id: string; lat: number; lng: number; label: string; value?: number | null; category?: string | null; location_name?: string; location_note?: string; metrics?: { field: string; value: Scalar }[] }[];
   map_unlocated?: Record<string, Scalar>[];
@@ -63,7 +76,7 @@ export type ChartFilterOptions = {
 export interface Widget { source_id?: string; id: string; title: string; width: number; library: 'Plotly' | 'ECharts'; config: ChartConfig; }
 export interface SectionDestination { dashboardId: string; sectionId: string; }
 export interface DestinationOption extends SectionDestination { dashboardName: string; sectionName: string; path: string; }
-export interface Workspace { _id: string; name: string; source_id: string; widgets: Widget[]; destination?: SectionDestination; filter_columns?: string[]; column_aliases?: ColumnAliases; filter_sorts?: FilterSorts; filter_option_rules?: FilterRule[]; default_filters?: Record<string, string[]>; }
+export interface Workspace { _id: string; name: string; source_id: string; widgets: Widget[]; destination?: SectionDestination; filter_columns?: string[]; column_aliases?: ColumnAliases; filter_sorts?: FilterSorts; filter_option_rules?: FilterRule[]; default_filters?: Record<string, string[]>; filter_settings?: Record<string, 'single' | 'multiple'>; editor_document?: Partial<Workspace>; editor_revision?: string; }
 export interface WorkspaceView extends Workspace { can_edit: boolean; requires_google?: boolean; source_kind: Source['kind']; source_access_mode?: 'public'; }
 export interface SectionWidgetRender { data?: ChartData; error?: string; }
 export interface SectionRenderResponse {
