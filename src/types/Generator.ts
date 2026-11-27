@@ -8,6 +8,11 @@ export type Scalar = string | number | boolean | null;
 export type SortAggregation = 'alphabetical' | 'sum' | 'max' | 'min' | 'count' | 'distinct';
 export type SortDirection = 'asc' | 'desc';
 export type PieLabelMode = 'percent' | 'value';
+export interface NumberPresentation {
+  style: 'decimal' | 'percentage' | 'percentage_points';
+  digits: number;
+  group_digits: boolean;
+}
 export interface SortConfig { field: string; aggregation: SortAggregation; direction: SortDirection; tie_order?: string[]; tie_breaker?: 'alphabetical' | 'source_heap'; }
 export type ColumnAliases = Record<string, string>;
 export type FilterSorts = Record<string, SortConfig>;
@@ -21,6 +26,7 @@ export interface ChartConfig extends ReadConfig {
   chart_type: ChartType; aggregation: string; x_col: string; y_col: string; group_col: string;
   y_cols?: string[];
   pie_label_mode?: PieLabelMode;
+  bar_label_mode?: 'value' | 'second_metric' | 'percent_of_stack';
   filter_rules?: FilterRule[]; table_mode?: 'rows' | 'summary'; category_limit?: number | null; include_other?: boolean;
   count_col?: string; indicator_condition?: { column: string; minimum: number } | null; indicator_rules?: FilterRule[];
   indicator_divisor?: number; indicator_rounding?: 'none' | 'floor' | 'ceil';
@@ -28,9 +34,11 @@ export interface ChartConfig extends ReadConfig {
   indicator_sum_rules?: FilterRule[];
   indicator_addends?: string[]; indicator_text_column?: string;
   indicator_single_value_columns?: string[]; value_format?: 'number' | 'percent' | 'percent_points';
+  number_formats?: Record<string, NumberPresentation>;
+  calculated_fields?: Record<string, string>;
   indicator_ratio?: { denominator: string; scale: number } | null;
   indicator_decimals?: number | null; indicator_suffix?: string; indicator_empty?: 'missing' | 'zero';
-  table_dimensions?: string[]; table_sorts?: SortConfig[];
+  table_dimensions?: string[]; table_sorts?: SortConfig[]; table_columns?: string[];
   preserve_empty_categories?: boolean;
   metric_condition?: { column: string; excluded_value: string } | null;
   metric_ratio?: { denominator: string; scale: number; subtract_denominator?: boolean; series_order?: 'asc' | 'desc' | null } | null;

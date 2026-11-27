@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from 'react';
 import { ChartData, ColumnAliases, Scalar, Widget } from 'types/Generator';
 import { useChartTheme } from 'utils/charts/chartTheme';
 import { columnLabel } from 'utils/generatorConfig';
+import { chartNumberText } from 'utils/chartNumbers';
 
 const MapsChart = lazy(() => import('components/graphics/MapsChart'));
 type Point = NonNullable<ChartData['map_points']>[number];
@@ -39,7 +40,7 @@ export default function LocationMap({ widget, result, aliases }: {
       <b>{point.label}{point.category ? ` · ${point.category}` : ''}</b>
       {point.location_note && <p>{point.location_note}</p>}
       <dl>{point.metrics?.map(metric => <div key={metric.field}>
-        <dt>{columnLabel(metric.field, aliases)}</dt><dd>{format(metric.value)}</dd>
+        <dt>{columnLabel(metric.field, aliases)}</dt><dd>{chartNumberText(metric.value, widget.config.number_formats?.[metric.field]) ?? format(metric.value)}</dd>
       </div>)}</dl>
     </div>)}
   </div>;

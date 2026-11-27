@@ -103,6 +103,96 @@ test('allows additional metrics on compatible charts', async ({ page }) => {
   await expect(addMetric).toBeDisabled(); // Both available columns are already selected.
 });
 
+test('a saved percentage label uses the calculated metric without drawing it as a bar', async ({ page }) => {
+  await page.addInitScript(() => {
+    const text = new Set<string>();
+    Object.assign(window, { drawnEducationLabels: text });
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (...args: Parameters<typeof fillText>) {
+      text.add(args[0]);
+      return fillText.apply(this, args);
+    };
+  });
+  const formula = 'IF(COUNT_DISTINCT([ÁMBITO]) > 1, MAX([ALUMNOS]) / MAX([BASE DE CÁLCULO]), MAX([PORCENTAJE ALUMNOS]) / 100)';
+  const config = { sheet: 'Datos', x_col: 'Mes', y_col: 'Valor', y_cols: ['Porcentaje'], chart_type: 'bar',
+    aggregation: 'sum', bar_label_mode: 'second_metric', calculated_fields: { Porcentaje: formula },
+    number_formats: { Porcentaje: { style: 'percentage', digits: 2, group_digits: true } } };
+  await page.route('**/v2/workspaces/education-label', route => route.fulfill({ json: {
+    _id: 'education-label', name: 'Perfil del estudiante', source_id: 'test-source',
+    widgets: [{ id: 'students', title: 'Estudiantes por género', width: 12, library: 'Plotly', config }],
+  } }));
+  await page.route('**/v2/sources/test-source/chart', route => route.fulfill({ json: {
+    labels: ['Grupo A'], datasets: [{ label: 'Valor', metric: 'Valor', data: [10] },
+      { label: 'Porcentaje', metric: 'Porcentaje', data: [.25] }], filtered_rows: 1, warnings: [],
+  } }));
+  await page.goto('/generador?editar=education-label');
+  await expect(page.getByRole('combobox', { name: 'Métrica adicional 1', exact: true })).toHaveValue('Porcentaje');
+  await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  await expect(page.locator('.barlayer .trace.bars')).toHaveCount(1);
+  await expect(page.locator('.barlayer .bartext')).toHaveText('25,00 %');
+  await page.getByRole('combobox', { name: 'Presentación', exact: true }).selectOption('ECharts');
+  await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  const drawnText = () => page.evaluate(() => [...(window as unknown as { drawnEducationLabels: Set<string> }).drawnEducationLabels]);
+  await expect.poll(drawnText).toContain('25,00 %');
+  expect(await drawnText()).not.toContain('Porcentaje');
+});
+
+test('keeps saved ordering and allows restoring categories, series and filter choices to automatic', async ({ page }) => {
+  const seriesSort = { field: 'Mes', aggregation: 'max', direction: 'desc', tie_order: ['3', '2', '1'] };
+  const categorySort = { field: 'Valor', aggregation: 'max', direction: 'desc', tie_breaker: 'source_heap' };
+  const filterSort = { field: 'Valor', aggregation: 'sum', direction: 'desc' };
+  const state = {
+    _id: 'saved-order', name: 'Orden guardado', source_id: 'test-source', filter_columns: ['Mes'],
+    filter_sorts: { Mes: filterSort },
+    widgets: [{ id: 'monthly', title: 'Resumen mensual', width: 12, library: 'ECharts', config: {
+      sheet: 'Datos', chart_type: 'bar', aggregation: 'sum', x_col: 'Valor', y_col: 'Valor', group_col: 'Mes',
+      category_sort: categorySort, series_sort: seriesSort, series_limit: 10,
+    } }],
+  };
+  await page.route('**/v2/workspaces/saved-order', async route => {
+    if (route.request().method() === 'PUT') Object.assign(state, route.request().postDataJSON());
+    await route.fulfill({ json: state });
+  });
+  await page.goto('/generador?editar=saved-order');
+
+  const openOrder = () => page.getByText('Orden del gráfico', { exact: true }).click();
+  const save = async () => {
+    await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
+    await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    return state.widgets[0].config;
+  };
+  const limit = page.getByRole('spinbutton', { name: 'Cantidad máxima de series' });
+  const seriesOrder = page.getByLabel('Orden de series: tipo de orden');
+  const categoryOrder = page.getByLabel('Orden de categorías: tipo de orden');
+  const filterOrder = page.getByLabel('Orden de Mes: tipo de orden');
+  await openOrder();
+  await expect(limit).toHaveValue('10');
+  await expect(seriesOrder).toHaveValue('max');
+  await expect(categoryOrder).toHaveValue('max');
+  await expect(filterOrder).toHaveValue('sum');
+
+  await limit.fill('3');
+  await page.getByLabel('Orden de series: dirección').selectOption('asc');
+  expect(await save()).toMatchObject({ series_limit: 3, series_sort: { ...seriesSort, direction: 'asc' },
+    category_sort: categorySort, group_col: 'Mes' });
+  expect(state.filter_sorts).toEqual({ Mes: filterSort });
+
+  await page.reload();
+  await openOrder();
+  await expect(limit).toHaveValue('3');
+  await limit.fill('');
+  await seriesOrder.selectOption('');
+  await categoryOrder.selectOption('');
+  await filterOrder.selectOption('');
+  const restored = await save();
+  expect(restored).not.toHaveProperty('series_limit');
+  expect(restored).not.toHaveProperty('category_sort');
+  expect(restored).not.toHaveProperty('series_sort');
+  expect(restored.group_col).toBe('Mes');
+  expect(state.filter_sorts).toEqual({});
+});
+
 test('summary tables paginate every category and reset when regenerated', async ({ page }) => {
   await page.route('**/v2/sources/test-source/chart', route => route.fulfill({ json: {
     labels: [], datasets: [], filtered_rows: 1046, warnings: [], columns: ['Causa', 'Total'],
@@ -119,6 +209,111 @@ test('summary tables paginate every category and reset when regenerated', async 
   await page.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'Diagnóstico 1', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Anterior', exact: true })).toBeDisabled();
+});
+
+test('browsing another sheet keeps saved chart readings and adds a chart from that sheet', async ({ page }) => {
+  const originalCharts = [
+    { id: 'details', title: 'Detalle', width: 6, library: 'Plotly', config: {
+      sheet: 'Detalle', header_row: 2, decimal: '.', types: { Valor: 'number' },
+      chart_type: 'indicator', x_col: 'Mes', y_col: 'Valor', aggregation: 'sum', filters: { Mes: ['1'] },
+    } },
+    { id: 'summary', title: 'Resumen', width: 6, library: 'ECharts', config: {
+      sheet: 'Resumen', header_row: 1, decimal: ',', types: {},
+      chart_type: 'bar', x_col: 'Mes', y_col: 'Valor', aggregation: 'sum', group_col: '',
+      series_sort: { field: 'Valor', aggregation: 'sum', direction: 'desc' },
+    } },
+  ];
+  let workspace = { _id: 'multi-sheet', name: 'Varias hojas', source_id: 'test-source', widgets: originalCharts };
+  await page.route('**/v2/sources/test-source/sheets', route => route.fulfill({ json: ['Detalle', 'Resumen', 'Otra'] }));
+  await page.route('**/v2/workspaces/multi-sheet', async route => {
+    if (route.request().method() === 'PUT') workspace = { ...workspace, ...route.request().postDataJSON() };
+    await route.fulfill({ json: workspace });
+  });
+  await page.goto('/generador?editar=multi-sheet');
+  const charts = page.locator('.generator-widget');
+  const expectChartSheet = (index: number, sheet: string) =>
+    expect(charts.nth(index).getByText('Fuente: Prueba.csv · ' + sheet, { exact: true })).toBeVisible();
+  const mainSheet = page.getByRole('combobox', { name: 'Hoja', exact: true });
+  await expectChartSheet(0, 'Detalle');
+  await expectChartSheet(1, 'Resumen');
+
+  await mainSheet.selectOption('Otra');
+  await page.getByRole('button', { name: 'Agregar gráfico', exact: true }).click();
+  await expectChartSheet(0, 'Detalle');
+  await expectChartSheet(1, 'Resumen');
+  await expectChartSheet(2, 'Otra');
+
+  await mainSheet.selectOption('Detalle');
+  for (const sheet of ['Resumen', 'Otra']) {
+    await charts.nth(2).getByRole('button', { name: 'Cambiar hoja', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Cambiar hoja' }).getByRole('button', { name: sheet, exact: true }).click();
+    await expectChartSheet(2, sheet);
+  }
+  const chartRequest = page.waitForRequest(request => request.url().endsWith('/test-source/chart'));
+  await charts.nth(2).getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  expect((await chartRequest).postDataJSON().sheet).toBe('Otra');
+
+  await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(workspace.widgets.slice(0, 2)).toEqual(originalCharts);
+  expect(workspace.widgets[2].config.sheet).toBe('Otra');
+  expect(workspace).toHaveProperty('filter_columns', null);
+
+  await page.reload();
+  await expectChartSheet(0, 'Detalle');
+  await expectChartSheet(1, 'Resumen');
+  await expectChartSheet(2, 'Otra');
+});
+
+test('generating a chart pins its sheet and changing another chart reads the destination columns', async ({ page }) => {
+  const reads: { sheet: string; types: Record<string, string> }[] = [];
+  await page.route('**/v2/sources/test-source/sheets', route => route.fulfill({ json: ['Datos', 'Resumen', 'Vacía'] }));
+  await page.route('**/v2/sources/test-source/preview', route => {
+    const read = route.request().postDataJSON();
+    reads.push(read);
+    if (read.sheet === 'Vacía') return route.fulfill({ status: 422, json: { detail: 'La hoja está vacía.' } });
+    const sheetPreview = read.sheet === 'Resumen' ? preview : {
+      ...preview, columns: [...preview.columns, 'CANTIDAD'],
+      column_meta: { ...preview.column_meta, CANTIDAD: preview.column_meta.Valor },
+    };
+    if (Object.keys(read.types).some(column => !sheetPreview.columns.includes(column))) {
+      return route.fulfill({ status: 422, json: { detail: 'La configuración de tipos contiene columnas inexistentes.' } });
+    }
+    return route.fulfill({ json: sheetPreview });
+  });
+  await page.reload();
+  await page.getByLabel('Archivos disponibles').selectOption('test-source');
+  await page.getByRole('combobox', { name: 'Tipo de CANTIDAD', exact: true }).selectOption('number');
+  const charts = page.locator('.generator-widget');
+  const firstChart = charts.nth(0);
+  await firstChart.getByRole('combobox', { name: 'Tipo de gráfico', exact: true }).selectOption('indicator');
+  const firstGeneration = page.waitForRequest(request => request.url().endsWith('/test-source/chart'));
+  await firstChart.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  expect((await firstGeneration).postDataJSON()).toMatchObject({ sheet: 'Datos', types: { CANTIDAD: 'number' } });
+  await expect(firstChart.locator('.generator-indicator strong')).toHaveText('15');
+
+  await page.getByRole('combobox', { name: 'Hoja', exact: true }).selectOption('Resumen');
+  await page.getByRole('button', { name: 'Agregar gráfico', exact: true }).click();
+  const secondChart = charts.nth(1);
+  await expect(secondChart.getByText('Fuente: Prueba.csv · Resumen', { exact: true })).toBeVisible();
+  await expect(firstChart.getByText('Fuente: Prueba.csv · Datos', { exact: true })).toBeVisible();
+  await expect(firstChart.locator('.generator-indicator strong')).toHaveText('15');
+
+  await firstChart.getByRole('button', { name: 'Cambiar hoja', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Cambiar hoja' });
+  await dialog.getByRole('button', { name: 'Vacía', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('La hoja está vacía.');
+  await expect(firstChart.getByText('Fuente: Prueba.csv · Datos', { exact: true })).toBeVisible();
+  await expect(firstChart.locator('.generator-indicator strong')).toHaveText('15');
+  await dialog.getByRole('button', { name: 'Resumen', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(firstChart.getByText('Fuente: Prueba.csv · Resumen', { exact: true })).toBeVisible();
+  expect(reads.filter(read => read.sheet === 'Resumen').at(-1)?.types).toEqual({});
+  const secondGeneration = page.waitForRequest(request => request.url().endsWith('/test-source/chart'));
+  await firstChart.getByRole('button', { name: 'Generar gráfico', exact: true }).click();
+  expect((await secondGeneration).postDataJSON()).toMatchObject({ sheet: 'Resumen', types: {} });
+  await expect(firstChart.locator('.generator-indicator strong')).toHaveText('15');
 });
 
 test('editing preserves each chart source, sheet, numeric parsing and individual restrictions', async ({ page }) => {
@@ -154,6 +349,76 @@ test('editing preserves each chart source, sheet, numeric parsing and individual
   expect(body.column_aliases).toMatchObject(workspace.column_aliases);
   expect(body.filter_option_rules).toEqual(workspace.filter_option_rules);
 });
+
+for (const library of ['ECharts', 'Plotly']) {
+  test(`${library} formats and restores year labels of an existing chart`, async ({ page }) => {
+    if (library === 'ECharts') await page.addInitScript(() => {
+      const text = new Set<string>();
+      Object.assign(window, { drawnChartText: text });
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (...args: Parameters<typeof fillText>) {
+        text.add(args[0]);
+        return fillText.apply(this, args);
+      };
+    });
+    const original = { sheet: 'Datos', header_row: 1, decimal: ',', types: {}, chart_type: 'bar',
+      aggregation: 'sum', x_col: 'Mes', y_col: 'Valor', group_col: 'AÑO', filters: { Mes: ['1'] },
+      series_sort: { field: 'AÑO', aggregation: 'max', direction: 'desc' } };
+    const state = { _id: 'year-format', name: 'Mortalidad de prueba', source_id: 'test-source',
+      widgets: [{ id: 'by-year', title: 'Mortalidad por mes', width: 12, library, config: original }] };
+    await page.route('**/v2/workspaces/year-format', async route => {
+      if (route.request().method() === 'PUT') Object.assign(state, route.request().postDataJSON());
+      await route.fulfill({ json: state });
+    });
+    await page.route('**/v2/sources/test-source/preview', route => route.fulfill({ json: {
+      ...preview, columns: [...preview.columns, 'AÑO'], column_meta: { ...preview.column_meta, AÑO: preview.column_meta.Mes },
+    } }));
+    await page.route('**/v2/sources/test-source/chart', route => {
+      expect(route.request().postDataJSON()).not.toHaveProperty('number_formats');
+      return route.fulfill({ json: {
+        labels: ['Enero'], datasets: [{ label: '2024.0', data: [40] }, { label: '2025.0', data: [42] }],
+        filtered_rows: 2, warnings: [],
+      } });
+    });
+    const expectLegend = async (labels: string[]) => {
+      if (library === 'Plotly') await expect(page.locator('.legend .legendtext')).toHaveText(labels);
+      else await expect.poll(() => page.evaluate(() => [...(window as unknown as { drawnChartText: Set<string> }).drawnChartText])).toEqual(expect.arrayContaining(labels));
+    };
+    const generate = () => page.getByRole('button', { name: 'Generar gráfico' }).click();
+    const save = async () => {
+      await page.getByRole('button', { name: 'Guardar tablero', exact: true }).click();
+      await page.getByRole('button', { name: 'Guardar y aplicar accesos' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    };
+    const selectYear = async () => {
+      await page.getByText('Formato numérico', { exact: true }).click();
+      await page.getByRole('combobox', { name: 'Columna o métrica', exact: true }).selectOption('AÑO');
+    };
+
+    await page.goto('/generador?editar=year-format');
+    await generate();
+    await expectLegend(['2024.0', '2025.0']);
+    await selectYear();
+    await page.getByRole('combobox', { name: 'Presentar como', exact: true }).selectOption('decimal');
+    await expectLegend(['2024', '2025']);
+    await save();
+    expect(state.widgets[0].config).toEqual({ ...original,
+      number_formats: { AÑO: { style: 'decimal', digits: 0, group_digits: false } },
+    });
+
+    await page.reload();
+    await generate();
+    await expectLegend(['2024', '2025']);
+    await selectYear();
+    const resetFormat = page.getByRole('button', { name: 'Restablecer formato', exact: true });
+    await resetFormat.click();
+    await expect(page.getByRole('combobox', { name: 'Presentar como', exact: true })).toHaveValue('');
+    await expect(resetFormat).toBeDisabled();
+    await expectLegend(['2024.0', '2025.0']);
+    await save();
+    expect(state.widgets[0].config).toEqual(original);
+  });
+}
 
 test('migrated indicators preserve formulas, published text and percentage formatting when saved', async ({ page }) => {
   const base = { sheet: 'Datos', header_row: 1, decimal: ',', types: {}, chart_type: 'indicator', x_col: 'Mes', y_col: 'Valor', aggregation: 'sum', filters: {} };

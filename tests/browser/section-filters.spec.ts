@@ -73,6 +73,26 @@ async function setup(page: Page, legacy = false, contextual = false) {
   return state;
 }
 
+test('the published section applies a saved number format to its legend', async ({ page }) => {
+  const state = await setup(page);
+  const chart = { ...widgets[0], library: 'Plotly', config: { ...widgets[0].config, group_col: 'Año' } };
+  state.workspace.widgets = [chart];
+  await page.route('**/v2/workspaces/saved/render', route => route.fulfill({ json: {
+    snapshot_id: 'snapshot',
+    workspace: { ...state.workspace, can_edit: true, source_kind: 'upload', widgets: [{
+      ...chart, config: { ...chart.config, number_formats: { Año: { style: 'decimal', digits: 0, group_digits: false } } },
+    }] },
+    widgets: { [chart.id]: { data: {
+      labels: ['Enero', 'Febrero'], datasets: [{ label: '2025.0', data: [2, 4] }, { label: '2026.0', data: [3, 1] }],
+      filtered_rows: 4, warnings: [],
+    } } },
+    filter_options: {},
+  } }));
+  await page.goto('/educacion/intervenciones');
+  const chartRegion = page.getByRole('region', { name: chart.title, exact: true });
+  await expect(chartRegion.locator('.legend .legendtext')).toHaveText(['2025', '2026'], { timeout: 25000 });
+});
+
 test('empty counters show zero only when the original explicitly requests it', async ({ page }) => {
   const state = await setup(page);
   const workspace = { ...state.workspace, widgets: [
